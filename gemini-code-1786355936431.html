@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Property Manager CRM</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#1e3a8a',
+                        secondary: '#3b82f6',
+                        accent: '#f59e0b',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+        .chat-bubble-ai { background-color: #f3f4f6; border-radius: 1rem 1rem 1rem 0; }
+        .chat-bubble-human { background-color: #3b82f6; color: white; border-radius: 1rem 1rem 0 1rem; }
+        .blinking-dot { animation: blink 1s infinite; }
+        @keyframes blink { 0% { opacity: 0.2; } 50% { opacity: 1; } 100% { opacity: 0.2; } }
+        
+        input[type="file"]::file-selector-button {
+            background-color: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            color: #475569;
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 0.5rem;
+        }
+        input[type="file"]::file-selector-button:hover { background-color: #e2e8f0; }
+    </style>
+</head>
+<body class="bg-slate-50 h-screen flex overflow-hidden font-sans text-slate-800">
+
+    <!-- Sidebar -->
+    <aside class="w-64 bg-primary text-white flex flex-col h-full shadow-xl z-10 relative">
+        <div class="p-6 border-b border-blue-800">
+            <h1 class="text-2xl font-bold tracking-tight"><i class="fa-solid fa-building-user mr-2"></i>PropAI CRM</h1>
+            <p class="text-xs text-blue-300 mt-1">Intelligent Portfolio Manager</p>
+        </div>
+        <nav class="flex-1 py-4 space-y-1">
+            <a href="#" onclick="switchTab('dashboard')" class="flex items-center px-6 py-3 bg-blue-800 border-l-4 border-accent text-white transition-colors tab-link" id="nav-dashboard">
+                <i class="fa-solid fa-chart-pie w-6"></i> Dashboard
+            </a>
+            <a href="#" onclick="switchTab('properties')" class="flex items-center px-6 py-3 hover:bg-blue-800 border-l-4 border-transparent hover:border-blue-400 text-blue-100 transition-colors tab-link" id="nav-properties">
+                <i class="fa-solid fa-house w-6"></i> Properties & Leases
+            </a>
+            <a href="#" onclick="switchTab('tasks')" class="flex items-center px-6 py-3 hover:bg-blue-800 border-l-4 border-transparent hover:border-blue-400 text-blue-100 transition-colors tab-link" id="nav-tasks">
+                <i class="fa-solid fa-list-check w-6"></i> Tasks & Bills
+                <span class="ml-auto bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full font-bold border border-red-400">3</span>
+            </a>
+            <a href="#" onclick="switchTab('tax-audit')" class="flex items-center px-6 py-3 hover:bg-blue-800 border-l-4 border-transparent hover:border-blue-400 text-blue-100 transition-colors tab-link" id="nav-tax-audit">
+                <i class="fa-solid fa-file-invoice-dollar w-6"></i> Tax & Audit Logs
+            </a>
+        </nav>
+        <div class="p-6 border-t border-blue-800">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-xl font-bold">JD</div>
+                <div>
+                    <p class="text-sm font-semibold">John Doe</p>
+                    <p class="text-xs text-blue-300">Property Manager</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col h-full relative overflow-y-auto">
+        <!-- Header -->
+        <header class="bg-white shadow-sm px-8 py-4 flex justify-between items-center z-10 sticky top-0">
+            <h2 class="text-xl font-semibold text-slate-700" id="page-title">Portfolio Overview</h2>
+            <div class="flex items-center gap-4">
+                <button onclick="openVoiceAgent()" class="bg-emerald-100 text-emerald-700 px-4 py-2 rounded-full text-sm font-semibold hover:bg-emerald-200 transition flex items-center gap-2 border border-emerald-300 shadow-sm">
+                    <i class="fa-solid fa-microphone"></i> Agentic Voice Console
+                </button>
+                <div class="relative">
+                    <i class="fa-regular fa-bell text-slate-500 text-xl cursor-pointer"></i>
+                    <span class="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] w-4 h-4 rounded-full flex items-center justify-center font-bold">3</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Content Area -->
+        <div class="p-8 pb-20 w-full max-w-7xl mx-auto" id="content-area">
+            
+            <!-- ================= VIEW: DASHBOARD ================= -->
+            <div id="view-dashboard" class="space-y-6">
+                <!-- KPI Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+                        <div class="flex justify-between items-start">
+                            <div><p class="text-sm text-slate-500 font-medium">Total Properties</p><h3 class="text-3xl font-bold mt-1">24</h3></div>
+                            <div class="p-3 bg-blue-50 text-blue-600 rounded-lg"><i class="fa-solid fa-building"></i></div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+                        <div class="flex justify-between items-start">
+                            <div><p class="text-sm text-slate-500 font-medium">Occupancy Rate</p><h3 class="text-3xl font-bold mt-1">92%</h3></div>
+                            <div class="p-3 bg-green-50 text-green-600 rounded-lg"><i class="fa-solid fa-check-circle"></i></div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+                        <div class="flex justify-between items-start">
+                            <div><p class="text-sm text-slate-500 font-medium">Rent Arrears</p><h3 class="text-3xl font-bold mt-1 text-red-500">RM 4,200</h3></div>
+                            <div class="p-3 bg-red-50 text-red-600 rounded-lg"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-6">
+                        <div class="flex justify-between items-start">
+                            <div><p class="text-sm text-slate-500 font-medium">Active Maintenance</p><h3 class="text-3xl font-bold mt-1">5</h3></div>
+                            <div class="p-3 bg-orange-50 text-orange-600 rounded-lg"><i class="fa-solid fa-wrench"></i></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent AI Activity -->
+                <div class="bg-white rounded-xl shadow-sm border border-slate-100">
+                    <div class="p-6 border-b border-slate-100 flex justify-between items-center">
+                        <h3 class="text-lg font-semibold"><i class="fa-solid fa-robot text-secondary mr-2"></i>Recent AI Agent Actions</h3>
+                    </div>
+                    <div class="divide-y divide-slate-100">
+                        <div class="p-4 px-6 flex items-center justify-between hover:bg-slate-50 transition">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center"><i class="fa-solid fa-phone-arrow-up-right"></i></div>
+                                <div>
+                                    <p class="font-semibold text-sm">Outbound Call: Rent Collection (Apt 4B)</p>
+                                    <p class="text-xs text-slate-500">AI successfully secured promise-to-pay for RM 1,500 by Friday.</p>
+                                </div>
+                            </div>
+                            <span class="text-xs font-medium bg-emerald-100 text-emerald-700 px-2 py-1 rounded">Success</span>
+                        </div>
+                        <div class="p-4 px-6 flex items-center justify-between hover:bg-slate-50 transition">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center"><i class="fa-solid fa-file-contract"></i></div>
+                                <div>
+                                    <p class="font-semibold text-sm">Automated Negotiation (Villa 12)</p>
+                                    <p class="text-xs text-slate-500">AI offered 5% rent increase upon renewal. Tenant accepted via SMS link.</p>
+                                </div>
+                            </div>
+                            <span class="text-xs font-medium bg-emerald-100 text-emerald-700 px-2 py-1 rounded">Success</span>
+                        </div>
+                        <div class="p-4 px-6 flex items-center justify-between hover:bg-slate-50 transition">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center"><i class="fa-solid fa-phone-arrow-down-left"></i></div>
+                                <div>
+                                    <p class="font-semibold text-sm">Inbound Call: Maintenance Request (Apt 2A)</p>
+                                    <p class="text-xs text-slate-500">AI triaged bursting pipe. Tagged 'Emergency'. Dispatching plumber API fired.</p>
+                                </div>
+                            </div>
+                            <span class="text-xs font-medium bg-orange-100 text-orange-700 px-2 py-1 rounded">Action Required</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ================= VIEW: PROPERTIES & LEASES ================= -->
+            <div id="view-properties" class="hidden space-y-6">
+                <div class="flex justify-between items-center mb-6">
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800">Property Database</h3>
+                        <p class="text-sm text-slate-500">Manage units, ownership, tenants, and execute AI tasks.</p>
+                    </div>
+                    <button class="bg-primary text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800 transition shadow flex items-center gap-2">
+                        <i class="fa-solid fa-plus"></i> Add New Unit
+                    </button>
+                </div>
+
+                <!-- Properties Search and Filter Bar -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 items-center mb-6">
+                    <div class="relative flex-1 w-full">
+                        <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" id="search-prop" onkeyup="filterContent('prop')" placeholder="Search properties by name or location..." class="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-inner">
+                    </div>
+                    <div class="w-full md:w-64 relative">
+                        <div class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"><i class="fa-solid fa-filter"></i></div>
+                        <select id="filter-prop" onchange="filterContent('prop')" class="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-primary text-slate-700 bg-white cursor-pointer shadow-sm">
+                            <option value="All">All Property Types</option>
+                            <option value="Apartment">Apartment</option>
+                            <option value="Condominium">Condominium</option>
+                            <option value="Villa">Landed / Villa</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                    
+                    <!-- Property 1 (Active) -->
+                    <div class="prop-item bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col transition-all duration-300" data-name="Apt 4B, TTDI" data-type="Apartment">
+                        <div class="p-5 border-b border-slate-100 flex justify-between items-start">
+                            <div>
+                                <h4 class="text-lg font-bold text-slate-800">Apt 4B, TTDI</h4>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Apartment</span>
+                                    <p class="text-xs text-slate-500"><i class="fa-solid fa-location-dot mr-1"></i> TTDI, KL</p>
+                                </div>
+                            </div>
+                            <span class="bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-bold border border-green-200">Leased</span>
+                        </div>
+                        <div class="p-5 flex-1 space-y-4">
+                            <!-- Ownership Info -->
+                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                <p class="text-[10px] uppercase font-bold text-slate-400 mb-1">Ownership / Landlord</p>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-8 h-8 rounded bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold"><i class="fa-solid fa-user-tie"></i></div>
+                                    <div>
+                                        <p class="text-sm font-semibold">Dato' Fazil</p>
+                                        <p class="text-xs text-slate-500">012-555-0101</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Tenant Info -->
+                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                <p class="text-[10px] uppercase font-bold text-slate-400 mb-1">Current Tenant</p>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-8 h-8 rounded bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold"><i class="fa-solid fa-user"></i></div>
+                                    <div>
+                                        <p class="text-sm font-semibold">Sarah Ahmad</p>
+                                        <p class="text-xs text-slate-500">017-333-8899</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Financials -->
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="text-slate-500 font-medium">Monthly Rent:</span>
+                                <span class="font-bold text-slate-800">RM 1,500.00</span>
+                            </div>
+                        </div>
+                        <div class="bg-slate-50 p-4 border-t border-slate-100 grid grid-cols-3 gap-2">
+                            <button class="bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 py-2 rounded text-xs font-semibold transition"><i class="fa-solid fa-pen mr-1"></i> Edit</button>
+                            <button onclick="openVoiceAgent()" class="bg-emerald-100 border border-emerald-300 text-emerald-700 hover:bg-emerald-200 py-2 rounded text-xs font-semibold transition"><i class="fa-solid fa-robot mr-1"></i> AI Call</button>
+                            <button class="bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 py-2 rounded text-xs font-semibold transition"><i class="fa-solid fa-folder-open mr-1"></i> Docs</button>
+                        </div>
+                    </div>
+
+                    <!-- Property 2 (Arrears) -->
+                    <div class="prop-item bg-white rounded-xl shadow-sm border border-red-200 overflow-hidden flex flex-col relative transition-all duration-300" data-name="Villa 12, Bangsar South" data-type="Villa">
+                        <div class="absolute top-0 left-0 w-full h-1 bg-red-500"></div>
+                        <div class="p-5 border-b border-slate-100 flex justify-between items-start">
+                            <div>
+                                <h4 class="text-lg font-bold text-slate-800">Villa 12</h4>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Villa</span>
+                                    <p class="text-xs text-slate-500"><i class="fa-solid fa-location-dot mr-1"></i> Bangsar South, KL</p>
+                                </div>
+                            </div>
+                            <span class="bg-red-100 text-red-700 px-3 py-1 rounded-full text-xs font-bold border border-red-200">Arrears</span>
+                        </div>
+                        <div class="p-5 flex-1 space-y-4">
+                            <!-- Ownership Info -->
+                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                <p class="text-[10px] uppercase font-bold text-slate-400 mb-1">Ownership / Landlord</p>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-8 h-8 rounded bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold"><i class="fa-solid fa-user-tie"></i></div>
+                                    <div>
+                                        <p class="text-sm font-semibold">Lim Wei Chong</p>
+                                        <p class="text-xs text-slate-500">019-222-7711</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Tenant Info -->
+                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                <p class="text-[10px] uppercase font-bold text-slate-400 mb-1">Current Tenant</p>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-8 h-8 rounded bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold"><i class="fa-solid fa-user"></i></div>
+                                    <div>
+                                        <p class="text-sm font-semibold">Rajesh Kumar</p>
+                                        <p class="text-xs text-slate-500">016-888-9944</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Financials -->
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="text-slate-500 font-medium">Monthly Rent:</span>
+                                <span class="font-bold text-slate-800">RM 3,200.00</span>
+                            </div>
+                        </div>
+                        <div class="bg-slate-50 p-4 border-t border-slate-100 grid grid-cols-3 gap-2">
+                            <button class="bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 py-2 rounded text-xs font-semibold transition"><i class="fa-solid fa-pen mr-1"></i> Edit</button>
+                            <button onclick="openVoiceAgent()" class="bg-red-500 text-white hover:bg-red-600 py-2 rounded text-xs font-semibold transition shadow-sm"><i class="fa-solid fa-robot mr-1"></i> AI Collect</button>
+                            <button class="bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 py-2 rounded text-xs font-semibold transition"><i class="fa-solid fa-folder-open mr-1"></i> Docs</button>
+                        </div>
+                    </div>
+
+                    <!-- Property 3 (Vacant) -->
+                    <div class="prop-item bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col transition-all duration-300 opacity-80 hover:opacity-100" data-name="Unit 2A, MK Pines" data-type="Condominium">
+                        <div class="p-5 border-b border-slate-100 flex justify-between items-start">
+                            <div>
+                                <h4 class="text-lg font-bold text-slate-800">Unit 2A, MK Pines</h4>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Condominium</span>
+                                    <p class="text-xs text-slate-500"><i class="fa-solid fa-location-dot mr-1"></i> Mont Kiara, KL</p>
+                                </div>
+                            </div>
+                            <span class="bg-slate-200 text-slate-600 px-3 py-1 rounded-full text-xs font-bold border border-slate-300">Vacant</span>
+                        </div>
+                        <div class="p-5 flex-1 space-y-4">
+                            <!-- Ownership Info -->
+                            <div class="bg-slate-50 p-3 rounded-lg border border-slate-100">
+                                <p class="text-[10px] uppercase font-bold text-slate-400 mb-1">Ownership / Landlord</p>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-8 h-8 rounded bg-blue-100 text-blue-700 flex items-center justify-center text-xs font-bold"><i class="fa-solid fa-user-tie"></i></div>
+                                    <div>
+                                        <p class="text-sm font-semibold">Dato' Fazil</p>
+                                        <p class="text-xs text-slate-500">012-555-0101</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <!-- Tenant Info (Empty) -->
+                            <div class="bg-slate-100 p-3 rounded-lg border border-slate-200 border-dashed flex items-center justify-center h-[62px]">
+                                <p class="text-sm text-slate-400 font-medium italic">No Active Tenant</p>
+                            </div>
+                            <!-- Financials -->
+                            <div class="flex justify-between items-center text-sm">
+                                <span class="text-slate-500 font-medium">Target Rent:</span>
+                                <span class="font-bold text-slate-800">RM 2,800.00</span>
+                            </div>
+                        </div>
+                        <div class="bg-slate-50 p-4 border-t border-slate-100 grid grid-cols-2 gap-2">
+                            <button class="bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 py-2 rounded text-xs font-semibold transition"><i class="fa-solid fa-pen mr-1"></i> Edit Property</button>
+                            <button class="bg-primary text-white hover:bg-blue-800 py-2 rounded text-xs font-semibold transition shadow-sm"><i class="fa-solid fa-share-nodes mr-1"></i> Publish Listing</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- No Results Message for Properties -->
+                <div id="no-results-prop" class="hidden bg-white p-12 rounded-xl shadow-sm border border-slate-100 text-center text-slate-500">
+                    <i class="fa-solid fa-building-circle-xmark text-4xl text-slate-300 mb-3"></i>
+                    <p class="font-medium text-lg">No properties found.</p>
+                </div>
+            </div>
+
+            <!-- ================= VIEW: TASKS & UTILITY PAYMENTS ================= -->
+            <div id="view-tasks" class="hidden space-y-6">
+                <!-- Header -->
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center">
+                    <div>
+                        <h3 class="text-2xl font-bold text-slate-800">Utility Payment Dashboard</h3>
+                        <p class="text-sm text-slate-500">Track and upload evidence for recurring property bills (Billing Cycle: August 2026).</p>
+                    </div>
+                    <button onclick="openCreateTaskModal()" class="mt-4 md:mt-0 bg-primary text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800 transition shadow flex items-center gap-2">
+                        <i class="fa-solid fa-gear"></i> Configure Bill Schedules
+                    </button>
+                </div>
+
+                <!-- Metrics -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5 flex items-center justify-between">
+                        <div>
+                            <p class="text-xs uppercase font-bold text-slate-400">Total Unpaid Bills</p>
+                            <p class="text-3xl font-black text-orange-500 mt-1">3</p>
+                        </div>
+                        <div class="w-12 h-12 rounded-full bg-orange-50 text-orange-500 flex items-center justify-center text-xl"><i class="fa-solid fa-file-circle-exclamation"></i></div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5 flex items-center justify-between">
+                        <div>
+                            <p class="text-xs uppercase font-bold text-slate-400">Total Paid (This Month)</p>
+                            <p class="text-3xl font-black text-emerald-500 mt-1">RM 842.50</p>
+                        </div>
+                        <div class="w-12 h-12 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center text-xl"><i class="fa-solid fa-check-double"></i></div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-100 p-5 flex items-center justify-between">
+                        <div>
+                            <p class="text-xs uppercase font-bold text-slate-400">Fully Cleared Properties</p>
+                            <p class="text-3xl font-black text-blue-600 mt-1">1 <span class="text-sm font-medium text-slate-400">/ 3</span></p>
+                        </div>
+                        <div class="w-12 h-12 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center text-xl"><i class="fa-solid fa-building-circle-check"></i></div>
+                    </div>
+                </div>
+
+                <!-- Search and Filter Bar -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col md:flex-row gap-4 items-center">
+                    <div class="relative flex-1 w-full">
+                        <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                        <input type="text" id="search-task" onkeyup="filterContent('task')" placeholder="Search utility bills by property name or location..." class="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary shadow-inner">
+                    </div>
+                    <div class="w-full md:w-64 relative">
+                        <div class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm"><i class="fa-solid fa-filter"></i></div>
+                        <select id="filter-task" onchange="filterContent('task')" class="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-primary text-slate-700 bg-white cursor-pointer shadow-sm">
+                            <option value="All">All Property Types</option>
+                            <option value="Apartment">Apartment</option>
+                            <option value="Condominium">Condominium</option>
+                            <option value="Villa">Landed / Villa</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Property Lists -->
+                <div class="space-y-6">
+                    
+                    <!-- Task Property 1 -->
+                    <div class="task-item bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden transition-all duration-300" data-name="Apt 4B, TTDI" data-type="Apartment">
+                        <div class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                            <div class="flex items-center gap-3">
+                                <i class="fa-solid fa-building text-primary text-xl"></i>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h4 class="font-bold text-slate-800 text-lg">Apt 4B, TTDI</h4>
+                                        <span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Apartment</span>
+                                    </div>
+                                    <p class="text-xs text-slate-500 font-medium">Owner: Dato' Fazil | 3 Configured Bills</p>
+                                </div>
+                            </div>
+                            <span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold border border-orange-200">
+                                1 Unpaid Bill
+                            </span>
+                        </div>
+                        
+                        <div class="divide-y divide-slate-100">
+                            <!-- Unpaid Row -->
+                            <div class="p-4 px-6 bg-orange-50/30 hover:bg-orange-50/50 transition flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                                <div class="flex items-center gap-4 flex-1">
+                                    <div class="w-10 h-10 rounded bg-yellow-100 text-yellow-600 flex items-center justify-center text-lg"><i class="fa-solid fa-bolt"></i></div>
+                                    <div>
+                                        <h5 class="font-bold text-slate-800 text-sm">Electricity (TNB)</h5>
+                                        <p class="text-xs text-slate-500">Billing Cycle: Aug 2026</p>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col md:flex-row items-center gap-3 w-full xl:w-auto bg-white p-2 rounded border border-orange-200 shadow-sm">
+                                    <div class="relative">
+                                        <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">RM</span>
+                                        <input type="number" placeholder="0.00" class="pl-8 pr-2 py-1.5 w-28 border border-slate-300 rounded text-xs font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                                    </div>
+                                    <div class="w-px h-6 bg-slate-200 hidden md:block"></div>
+                                    <input type="file" accept=".pdf,.jpg,.png" class="text-[10px] text-slate-500 w-full md:w-48">
+                                    <button class="w-full md:w-auto bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold shadow-sm transition whitespace-nowrap">
+                                        <i class="fa-solid fa-check mr-1"></i> Mark Paid
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Paid Rows -->
+                            <div class="p-4 px-6 hover:bg-slate-50 transition flex justify-between items-center">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-10 h-10 rounded bg-blue-50 text-blue-500 flex items-center justify-center text-lg"><i class="fa-solid fa-droplet"></i></div>
+                                    <div>
+                                        <h5 class="font-bold text-slate-800 text-sm">Water (Air Selangor)</h5>
+                                        <p class="text-xs text-slate-500">Billing Cycle: Aug 2026</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-6">
+                                    <span class="font-bold text-slate-700">RM 45.50</span>
+                                    <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1"><i class="fa-solid fa-check-circle"></i> Paid</span>
+                                </div>
+                            </div>
+                            <div class="p-4 px-6 hover:bg-slate-50 transition flex justify-between items-center">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-10 h-10 rounded bg-slate-100 text-slate-500 flex items-center justify-center text-lg"><i class="fa-solid fa-sink"></i></div>
+                                    <div>
+                                        <h5 class="font-bold text-slate-800 text-sm">Sewerage (Indah Water)</h5>
+                                        <p class="text-xs text-slate-500">Billing Cycle: Aug 2026</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-6">
+                                    <span class="font-bold text-slate-700">RM 32.00</span>
+                                    <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1"><i class="fa-solid fa-check-circle"></i> Paid</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Task Property 2 -->
+                    <div class="task-item bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden transition-all duration-300" data-name="Villa 12, Bangsar South" data-type="Villa">
+                        <div class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                            <div class="flex items-center gap-3">
+                                <i class="fa-solid fa-house-chimney text-primary text-xl"></i>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h4 class="font-bold text-slate-800 text-lg">Villa 12, Bangsar South</h4>
+                                        <span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Villa</span>
+                                    </div>
+                                    <p class="text-xs text-slate-500 font-medium">Owner: Lim Wei Chong | 2 Configured Bills</p>
+                                </div>
+                            </div>
+                            <span class="bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold border border-orange-200">
+                                2 Unpaid Bills
+                            </span>
+                        </div>
+                        <div class="divide-y divide-slate-100">
+                            <!-- Unpaid Row 1 (Fixed) -->
+                            <div class="p-4 px-6 bg-orange-50/30 hover:bg-orange-50/50 transition flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                                <div class="flex items-center gap-4 flex-1">
+                                    <div class="w-10 h-10 rounded bg-blue-100 text-blue-600 flex items-center justify-center text-lg"><i class="fa-solid fa-building-user"></i></div>
+                                    <div>
+                                        <h5 class="font-bold text-slate-800 text-sm">Management Fee (JMB)</h5>
+                                        <p class="text-xs text-slate-500">Billing Cycle: Q3 2026 (Fixed Amount)</p>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col md:flex-row items-center gap-3 w-full xl:w-auto bg-white p-2 rounded border border-orange-200 shadow-sm">
+                                    <span class="font-bold text-slate-700 px-4 text-sm">RM 650.00</span>
+                                    <div class="w-px h-6 bg-slate-200 hidden md:block"></div>
+                                    <input type="file" accept=".pdf,.jpg,.png" class="text-[10px] text-slate-500 w-full md:w-48">
+                                    <button class="w-full md:w-auto bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold shadow-sm transition whitespace-nowrap">
+                                        <i class="fa-solid fa-check mr-1"></i> Mark Paid
+                                    </button>
+                                </div>
+                            </div>
+                            <!-- Unpaid Row 2 (Variable) -->
+                            <div class="p-4 px-6 bg-orange-50/30 hover:bg-orange-50/50 transition flex flex-col xl:flex-row justify-between items-start xl:items-center gap-4">
+                                <div class="flex items-center gap-4 flex-1">
+                                    <div class="w-10 h-10 rounded bg-yellow-100 text-yellow-600 flex items-center justify-center text-lg"><i class="fa-solid fa-bolt"></i></div>
+                                    <div>
+                                        <h5 class="font-bold text-slate-800 text-sm">Electricity (TNB)</h5>
+                                        <p class="text-xs text-slate-500">Billing Cycle: Aug 2026</p>
+                                    </div>
+                                </div>
+                                <div class="flex flex-col md:flex-row items-center gap-3 w-full xl:w-auto bg-white p-2 rounded border border-orange-200 shadow-sm">
+                                    <div class="relative">
+                                        <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-semibold">RM</span>
+                                        <input type="number" placeholder="0.00" class="pl-8 pr-2 py-1.5 w-28 border border-slate-300 rounded text-xs font-bold text-slate-700 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                                    </div>
+                                    <div class="w-px h-6 bg-slate-200 hidden md:block"></div>
+                                    <input type="file" accept=".pdf,.jpg,.png" class="text-[10px] text-slate-500 w-full md:w-48">
+                                    <button class="w-full md:w-auto bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-1.5 rounded text-xs font-bold shadow-sm transition whitespace-nowrap">
+                                        <i class="fa-solid fa-check mr-1"></i> Mark Paid
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Task Property 3 (Cleared) -->
+                    <div class="task-item bg-white rounded-xl shadow-sm border border-emerald-200 overflow-hidden relative transition-all duration-300" data-name="Unit 2A, MK Pines" data-type="Condominium">
+                        <div class="absolute top-0 left-0 bottom-0 w-1 bg-emerald-500"></div>
+                        <div class="bg-emerald-50/30 px-6 py-4 border-b border-emerald-100 flex justify-between items-center pl-7">
+                            <div class="flex items-center gap-3">
+                                <i class="fa-solid fa-city text-emerald-600 text-xl"></i>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <h4 class="font-bold text-slate-800 text-lg">Unit 2A, MK Pines</h4>
+                                        <span class="text-[10px] bg-slate-200 text-slate-600 px-2 py-0.5 rounded font-bold uppercase tracking-wider">Condominium</span>
+                                    </div>
+                                    <p class="text-xs text-slate-500 font-medium">Owner: Dato' Fazil (JV) | 2 Configured Bills</p>
+                                </div>
+                            </div>
+                            <span class="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
+                                <i class="fa-solid fa-shield-check"></i> All Cleared
+                            </span>
+                        </div>
+                        <div class="divide-y divide-slate-100">
+                            <!-- Paid Row 1 -->
+                            <div class="p-4 px-7 hover:bg-slate-50 transition flex justify-between items-center opacity-80">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-10 h-10 rounded bg-yellow-50 text-yellow-500 flex items-center justify-center text-lg"><i class="fa-solid fa-bolt"></i></div>
+                                    <div>
+                                        <h5 class="font-bold text-slate-800 text-sm">Electricity (TNB)</h5>
+                                        <p class="text-xs text-slate-500">Billing Cycle: Aug 2026</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-6">
+                                    <span class="font-bold text-slate-700">RM 115.00</span>
+                                    <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1"><i class="fa-solid fa-check-circle"></i> Paid</span>
+                                </div>
+                            </div>
+                            <!-- Paid Row 2 -->
+                            <div class="p-4 px-7 hover:bg-slate-50 transition flex justify-between items-center opacity-80">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-10 h-10 rounded bg-blue-50 text-blue-500 flex items-center justify-center text-lg"><i class="fa-solid fa-building-user"></i></div>
+                                    <div>
+                                        <h5 class="font-bold text-slate-800 text-sm">Management Fee (JMB)</h5>
+                                        <p class="text-xs text-slate-500">Billing Cycle: Aug 2026</p>
+                                    </div>
+                                </div>
+                                <div class="flex items-center gap-6">
+                                    <span class="font-bold text-slate-700">RM 450.00</span>
+                                    <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded flex items-center gap-1"><i class="fa-solid fa-check-circle"></i> Paid</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- No Results Message for Tasks -->
+                    <div id="no-results-task" class="hidden bg-white p-12 rounded-xl shadow-sm border border-slate-100 text-center text-slate-500">
+                        <i class="fa-solid fa-folder-open text-4xl text-slate-300 mb-3"></i>
+                        <p class="font-medium text-lg">No utility schedules found.</p>
+                        <p class="text-sm">Try adjusting your search criteria or property type filter.</p>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- ================= VIEW: TAX & AUDIT LOGS ================= -->
+            <div id="view-tax-audit" class="hidden space-y-6">
+                <!-- Header & Owner Context Filter -->
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <div>
+                        <h3 class="text-lg font-bold text-slate-800">Owner Income Tax Statements (LHDN)</h3>
+                        <p class="text-sm text-slate-500">Net rental income calculated strictly from expenses with verified uploaded receipts.</p>
+                    </div>
+                    <div class="flex gap-4 items-center mt-4 md:mt-0">
+                        <div class="flex flex-col">
+                            <label class="text-[10px] uppercase font-bold text-slate-400">Viewing As Owner:</label>
+                            <select class="bg-slate-50 border border-slate-200 rounded p-1 text-sm font-semibold outline-none focus:border-blue-500 cursor-pointer text-primary">
+                                <option>Dato' Fazil (IC: 820101-14-XXXX)</option>
+                                <option>Lim Wei Chong (IC: 750412-10-XXXX)</option>
+                            </select>
+                        </div>
+                        <button class="bg-primary text-white px-5 py-2 rounded-lg text-sm font-semibold hover:bg-blue-800 transition shadow flex items-center gap-2">
+                            <i class="fa-solid fa-file-pdf"></i> Export e-Filing PDF
+                        </button>
+                    </div>
+                </div>
+
+                <!-- 2023 TAX YEAR GROUP -->
+                <div class="space-y-5">
+                    <div class="flex items-center gap-3 border-b border-slate-200 pb-2">
+                        <h4 class="text-2xl font-black text-slate-800">Tax Year: 2023</h4>
+                        <span class="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded font-bold">Jan 1 - Dec 31</span>
+                    </div>
+                    
+                    <!-- 2023 Total Taxable Summary Banner -->
+                    <div class="bg-gradient-to-r from-slate-900 to-primary rounded-xl shadow-md p-8 text-white flex flex-col md:flex-row justify-between items-center relative overflow-hidden">
+                        <div class="absolute -right-10 -top-10 text-9xl text-white opacity-5"><i class="fa-solid fa-calculator"></i></div>
+                        <div class="z-10 w-full">
+                            <p class="text-blue-200 text-sm font-semibold uppercase tracking-widest mb-1">Total Net Taxable Rental Income (2023)</p>
+                            <h2 class="text-5xl font-black">RM 22,156.00</h2>
+                            <p class="text-xs text-blue-300 mt-3 flex items-center gap-2">
+                                <i class="fa-solid fa-shield-check text-green-400 text-lg"></i> 
+                                Ready for Form BE (Part C: Statutory income from rents). Expenses fully verified via CRM receipt audit trail.
+                            </p>
+                        </div>
+                        <div class="z-10 mt-6 md:mt-0 text-left md:text-right border-t md:border-t-0 md:border-l border-blue-700/50 pt-4 md:pt-0 md:pl-8 w-full md:w-auto min-w-[200px]">
+                            <p class="text-xs text-blue-200 uppercase font-semibold">Beneficiary Share</p>
+                            <p class="text-xl font-bold">Dato' Fazil</p>
+                            <p class="text-xs mt-1 text-blue-300 bg-blue-900/50 inline-block px-2 py-1 rounded"><i class="fa-solid fa-lock text-[10px] mr-1"></i> Access Restricted</p>
+                        </div>
+                    </div>
+
+                    <!-- Property 1 Details (100% Ownership) -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition">
+                        <div class="bg-slate-50 p-5 border-b border-slate-200 flex justify-between items-center">
+                            <div>
+                                <h5 class="font-bold text-slate-800 text-xl">Apt 4B, TTDI</h5>
+                                <p class="text-sm text-slate-500 font-medium text-primary"><i class="fa-solid fa-chart-pie mr-1"></i> 100% Ownership</p>
+                            </div>
+                            <button class="text-slate-400 hover:text-primary text-sm font-semibold transition"><i class="fa-solid fa-receipt mr-1"></i> View All Receipts</button>
+                        </div>
+                        <div class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <!-- Financial Breakdown Ledger -->
+                            <div class="space-y-3">
+                                <div class="flex justify-between text-sm items-center">
+                                    <span class="text-slate-600 font-medium">Total Rental Collection (Gross):</span>
+                                    <span class="font-bold text-slate-800 text-base">RM 18,000.00</span>
+                                </div>
+                                <div class="pl-4 border-l-2 border-red-200 space-y-2 py-2">
+                                    <div class="flex justify-between text-sm text-slate-500 hover:text-slate-800 transition">
+                                        <span>(-) Maintenance & Mgmt Fees:</span>
+                                        <span class="text-red-500 font-medium">- RM 1,200.00</span>
+                                    </div>
+                                    <div class="flex justify-between text-sm text-slate-500 hover:text-slate-800 transition">
+                                        <span>(-) Repairs & Renovation:</span>
+                                        <span class="text-red-500 font-medium">- RM 3,500.00</span>
+                                    </div>
+                                    <div class="flex justify-between text-sm text-slate-500 hover:text-slate-800 transition">
+                                        <span>(-) Sewerage (Indah Water):</span>
+                                        <span class="text-red-500 font-medium">- RM 96.00</span>
+                                    </div>
+                                </div>
+                                <div class="flex justify-between text-sm pt-3 border-t border-slate-200">
+                                    <span class="font-bold text-slate-700">Net Property Income (Before Split):</span>
+                                    <span class="font-bold text-slate-800 text-lg">RM 13,204.00</span>
+                                </div>
+                            </div>
+                            <!-- Ownership Split Calculation -->
+                            <div class="bg-slate-50 rounded-xl p-5 border border-slate-100 h-full flex flex-col justify-center">
+                                <p class="text-xs font-bold uppercase text-slate-400 mb-4 tracking-wide">Income Split Distribution</p>
+                                <div class="flex justify-between items-center text-sm bg-white p-3 rounded-lg border-2 border-blue-500 shadow-sm relative overflow-hidden">
+                                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-blue-500"></div>
+                                    <span class="font-bold text-blue-800 pl-2"><i class="fa-solid fa-user-tie mr-2"></i>Dato' Fazil (100%)</span>
+                                    <span class="font-black text-blue-700 text-lg">RM 13,204.00</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Property 2 Details (50% Ownership JV) -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden hover:shadow-md transition">
+                        <div class="bg-slate-50 p-5 border-b border-slate-200 flex justify-between items-center">
+                            <div>
+                                <h5 class="font-bold text-slate-800 text-xl">Unit 2A, MK Pines</h5>
+                                <p class="text-sm text-slate-500 font-medium text-accent"><i class="fa-solid fa-chart-pie mr-1"></i> 50% Ownership (Joint Venture)</p>
+                            </div>
+                            <button class="text-slate-400 hover:text-primary text-sm font-semibold transition"><i class="fa-solid fa-receipt mr-1"></i> View All Receipts</button>
+                        </div>
+                        <div class="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <!-- Financial Breakdown Ledger -->
+                            <div class="space-y-3">
+                                <div class="flex justify-between text-sm items-center">
+                                    <span class="text-slate-600 font-medium">Total Rental Collection (Gross):</span>
+                                    <span class="font-bold text-slate-800 text-base">RM 20,000.00</span>
+                                </div>
+                                <div class="pl-4 border-l-2 border-red-200 space-y-2 py-2">
+                                    <div class="flex justify-between text-sm text-slate-500 hover:text-slate-800 transition">
+                                        <span>(-) Maintenance & Mgmt Fees:</span>
+                                        <span class="text-red-500 font-medium">- RM 2,000.00</span>
+                                    </div>
+                                    <div class="flex justify-between text-sm text-slate-500 hover:text-slate-800 transition">
+                                        <span>(-) Repairs & Renovation:</span>
+                                        <span class="text-red-500 font-medium">- RM 0.00</span>
+                                    </div>
+                                    <div class="flex justify-between text-sm text-slate-500 hover:text-slate-800 transition">
+                                        <span>(-) Sewerage (Indah Water):</span>
+                                        <span class="text-red-500 font-medium">- RM 96.00</span>
+                                    </div>
+                                </div>
+                                <div class="flex justify-between text-sm pt-3 border-t border-slate-200">
+                                    <span class="font-bold text-slate-700">Net Property Income (Before Split):</span>
+                                    <span class="font-bold text-slate-800 text-lg">RM 17,904.00</span>
+                                </div>
+                            </div>
+                            <!-- Ownership Split Calculation -->
+                            <div class="bg-slate-50 rounded-xl p-5 border border-slate-100 h-full flex flex-col justify-center">
+                                <p class="text-xs font-bold uppercase text-slate-400 mb-4 tracking-wide">Income Split Distribution</p>
+                                <!-- Logged In Owner's Share -->
+                                <div class="flex justify-between items-center text-sm bg-white p-3 rounded-lg border-2 border-blue-500 shadow-sm relative overflow-hidden mb-2">
+                                    <div class="absolute left-0 top-0 bottom-0 w-1 bg-blue-500"></div>
+                                    <span class="font-bold text-blue-800 pl-2"><i class="fa-solid fa-user-tie mr-2"></i>Dato' Fazil (50%)</span>
+                                    <span class="font-black text-blue-700 text-lg">RM 8,952.00</span>
+                                </div>
+                                <!-- Partner's Share -->
+                                <div class="flex justify-between items-center text-sm bg-slate-200/50 p-2 rounded border border-slate-200 mb-1 opacity-75">
+                                    <span class="font-semibold text-slate-500"><i class="fa-solid fa-user-shield mr-2"></i>Ahmad Zaki (50%)</span>
+                                    <span class="font-bold text-slate-500">RM 8,952.00</span>
+                                </div>
+                                <p class="text-[10px] text-slate-400 mt-1 text-center"><i class="fa-solid fa-eye-slash mr-1"></i> Partner's portfolio view restricted.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Modal: Create New Task / Bill Setup -->
+    <div id="create-task-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+        <div class="bg-white w-full max-w-lg rounded-xl shadow-2xl overflow-hidden">
+            <div class="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+                <h3 class="font-bold text-slate-800 text-lg">Configure Recurring Bill</h3>
+                <button onclick="closeCreateTaskModal()" class="text-slate-400 hover:text-slate-700"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Link to Property</label>
+                    <select class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:border-primary">
+                        <option>Apt 4B, TTDI</option>
+                        <option>Villa 12</option>
+                        <option>Unit 2A, MK Pines</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Bill Type</label>
+                    <select class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:border-primary">
+                        <option>Electricity (TNB)</option>
+                        <option>Water (Air Selangor)</option>
+                        <option>Sewerage (Indah Water)</option>
+                        <option>Management / JMB Fee</option>
+                        <option>Property Tax (Cukai Pintu)</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Schedule</label>
+                        <select class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:border-primary">
+                            <option>Recurring Monthly</option>
+                            <option>Recurring Quarterly</option>
+                            <option>Recurring Annually</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Amount Tracking</label>
+                        <select class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:border-primary">
+                            <option>Variable (Manual Input)</option>
+                            <option>Fixed Amount</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="bg-blue-50 text-blue-700 p-3 rounded text-xs font-medium border border-blue-100 mt-2 flex gap-2">
+                    <i class="fa-solid fa-circle-info mt-0.5"></i>
+                    <p>This will add a new utility row to the property's dashboard. Paid receipts will automatically sync to the LHDN Tax Audit ledger.</p>
+                </div>
+            </div>
+            <div class="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-end gap-3">
+                <button onclick="closeCreateTaskModal()" class="px-4 py-2 text-slate-600 font-semibold text-sm hover:bg-slate-200 rounded transition">Cancel</button>
+                <button onclick="closeCreateTaskModal()" class="px-6 py-2 bg-primary text-white font-semibold text-sm hover:bg-blue-800 rounded shadow transition">Save Configuration</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Voice Agent Modal Simulator (Full Chat restored) -->
+    <div id="ai-modal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center">
+        <div class="glass-panel w-full max-w-lg rounded-2xl shadow-2xl flex flex-col overflow-hidden border border-slate-200">
+            <!-- Modal Header -->
+            <div class="bg-slate-900 text-white p-4 flex justify-between items-center">
+                <div class="flex items-center gap-3">
+                    <div class="w-3 h-3 bg-red-500 rounded-full blinking-dot"></div>
+                    <h3 class="font-semibold text-sm">Live Agentic Voice Call</h3>
+                </div>
+                <button onclick="closeVoiceAgent()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            
+            <!-- Agent Context Pane -->
+            <div class="bg-slate-100 p-3 text-xs border-b border-slate-200">
+                <p><strong>Goal:</strong> Late Rent Collection (RM 1,500)</p>
+                <p><strong>Tenant:</strong> Sarah Ahmad (Apt 4B)</p>
+                <p><strong>CRM Tools Available to AI:</strong> <code>[check_ledger]</code>, <code>[send_payment_link]</code>, <code>[log_promise_to_pay]</code></p>
+            </div>
+
+            <!-- Transcript Area -->
+            <div class="p-6 h-80 overflow-y-auto flex flex-col gap-4 text-sm" id="chat-container">
+                <div class="chat-bubble-ai p-3 self-start max-w-[80%] shadow-sm">
+                    <p class="font-semibold text-xs text-slate-500 mb-1"><i class="fa-solid fa-robot mr-1"></i>AI Voice Agent</p>
+                    Hi, am I speaking with Sarah? This is the property management office for Apartment 4B.
+                </div>
+                <div class="chat-bubble-human p-3 self-end max-w-[80%] shadow-sm mt-2 opacity-0 transform translate-y-2 transition-all duration-500" id="msg-2">
+                    Yes, this is Sarah.
+                </div>
+                <div class="chat-bubble-ai p-3 self-start max-w-[80%] shadow-sm mt-2 opacity-0 transform translate-y-2 transition-all duration-500" id="msg-3">
+                    <p class="font-semibold text-xs text-slate-500 mb-1"><i class="fa-solid fa-robot mr-1"></i>AI Voice Agent</p>
+                    Hi Sarah. I'm calling because our system shows October's rent of RM 1,500 is currently 5 days overdue. Are you able to process that payment today?
+                </div>
+                <div class="chat-bubble-human p-3 self-end max-w-[80%] shadow-sm mt-2 opacity-0 transform translate-y-2 transition-all duration-500" id="msg-4">
+                    Oh, I completely forgot! I've been traveling. I get back on Thursday, can I pay it Friday morning?
+                </div>
+                
+                <!-- System Action visualizer -->
+                <div class="self-center mt-2 opacity-0 transition-all duration-500 text-center" id="msg-5">
+                    <span class="inline-block bg-slate-800 text-white text-[10px] px-3 py-1 rounded-full font-mono">
+                        <i class="fa-solid fa-bolt text-yellow-400 mr-1"></i> AI executing tool: log_promise_to_pay({date: 'Friday', amount: 1500})
+                    </span>
+                </div>
+
+                <div class="chat-bubble-ai p-3 self-start max-w-[80%] shadow-sm mt-2 opacity-0 transform translate-y-2 transition-all duration-500" id="msg-6">
+                    <p class="font-semibold text-xs text-slate-500 mb-1"><i class="fa-solid fa-robot mr-1"></i>AI Voice Agent</p>
+                    Not a problem, Sarah. I have noted your account that the payment will be made this Friday morning. I will SMS you a quick payment link now so you have it ready. Have a safe trip back!
+                </div>
+            </div>
+            
+            <div class="p-4 bg-slate-50 border-t border-slate-200 text-center">
+                <button onclick="runSimulation()" id="sim-btn" class="bg-secondary text-white px-6 py-2 rounded-full text-sm font-semibold hover:bg-blue-600 transition shadow">
+                    Start Simulation Call
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Tab routing logic
+        function switchTab(tabId) {
+            document.getElementById('view-dashboard').classList.add('hidden');
+            document.getElementById('view-properties').classList.add('hidden');
+            document.getElementById('view-tax-audit').classList.add('hidden');
+            document.getElementById('view-tasks').classList.add('hidden');
+            
+            document.querySelectorAll('.tab-link').forEach(el => {
+                el.classList.remove('bg-blue-800', 'border-accent');
+                el.classList.add('border-transparent');
+            });
+
+            document.getElementById('view-' + tabId).classList.remove('hidden');
+            
+            const activeNav = document.getElementById('nav-' + tabId);
+            activeNav.classList.remove('border-transparent');
+            activeNav.classList.add('bg-blue-800', 'border-accent');
+
+            const titles = {
+                'dashboard': 'Portfolio Overview',
+                'properties': 'Properties & Leases',
+                'tasks': 'Utility Payment Dashboard',
+                'tax-audit': 'Tax & Compliance Audit Logs'
+            };
+            document.getElementById('page-title').innerText = titles[tabId];
+        }
+
+        // Universal Search & Filter Logic (Works for both Properties and Tasks tabs)
+        function filterContent(sectionType) {
+            // sectionType is either 'prop' or 'task'
+            const searchInput = document.getElementById(`search-${sectionType}`).value.toLowerCase();
+            const typeSelect = document.getElementById(`filter-${sectionType}`).value;
+            const propertyCards = document.querySelectorAll(`.${sectionType}-item`);
+            const noResultsMsg = document.getElementById(`no-results-${sectionType}`);
+            
+            let visibleCount = 0;
+
+            propertyCards.forEach(card => {
+                const propName = card.getAttribute('data-name').toLowerCase();
+                const propType = card.getAttribute('data-type');
+                
+                const matchesSearch = propName.includes(searchInput);
+                const matchesType = (typeSelect === 'All' || propType === typeSelect);
+
+                if (matchesSearch && matchesType) {
+                    card.classList.remove('hidden');
+                    visibleCount++;
+                } else {
+                    card.classList.add('hidden');
+                }
+            });
+
+            if (visibleCount === 0) {
+                noResultsMsg.classList.remove('hidden');
+            } else {
+                noResultsMsg.classList.add('hidden');
+            }
+        }
+
+        // Modal Controls
+        function openCreateTaskModal() { document.getElementById('create-task-modal').classList.remove('hidden'); }
+        function closeCreateTaskModal() { document.getElementById('create-task-modal').classList.add('hidden'); }
+        
+        // AI Voice Agent Simulation Logic
+        function openVoiceAgent() {
+            document.getElementById('ai-modal').classList.remove('hidden');
+            resetSimulation();
+        }
+
+        function closeVoiceAgent() {
+            document.getElementById('ai-modal').classList.add('hidden');
+        }
+
+        function resetSimulation() {
+            for (let i = 2; i <= 6; i++) {
+                const el = document.getElementById('msg-' + i);
+                el.classList.add('opacity-0', 'translate-y-2');
+                el.classList.remove('opacity-100', 'translate-y-0');
+            }
+            document.getElementById('sim-btn').innerText = "Start Simulation Call";
+            document.getElementById('sim-btn').disabled = false;
+            document.getElementById('chat-container').scrollTop = 0;
+        }
+
+        function runSimulation() {
+            const btn = document.getElementById('sim-btn');
+            btn.innerText = "Call in progress...";
+            btn.disabled = true;
+
+            const delays = [1000, 3000, 5500, 7500, 9000];
+            const container = document.getElementById('chat-container');
+
+            for (let i = 2; i <= 6; i++) {
+                setTimeout(() => {
+                    const el = document.getElementById('msg-' + i);
+                    el.classList.remove('opacity-0', 'translate-y-2');
+                    el.classList.add('opacity-100', 'translate-y-0');
+                    container.scrollTop = container.scrollHeight;
+                    
+                    if (i === 6) {
+                        setTimeout(() => {
+                            btn.innerText = "Call Ended. Simulation Complete.";
+                        }, 1000);
+                    }
+                }, delays[i-2]);
+            }
+        }
+
+        // Initialize to open Tasks tab by default for this demo
+        window.onload = () => switchTab('tasks');
+    </script>
+</body>
+</html>

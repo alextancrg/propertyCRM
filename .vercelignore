@@ -1,0 +1,24 @@
+# One-time export tooling (not part of the app)
+prisma/generated
+prisma/schema.export.prisma
+prisma/schema.export.sqlite.prisma
+prisma/export-to-pg.cjs
+prisma/_verify-pg.js
+
+# Local/dev docs & agent files
+.agents
+.claude
+Progress.md
+spec.md
+skills-lock.json
+gemini-code-*.html
+
+# Local DB + env (never deploy)
+*.db
+*.db-journal
+.env
+.env.*
+!vercel.json
+
+# Uploaded documents / payment slips — sensitive, never serve publicly
+public/uploads

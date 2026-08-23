@@ -1,0 +1,42 @@
+{
+  "name": "assethub",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "postinstall": "node prisma/generate.mjs",
+    "vercel-build": "node prisma/generate.mjs && prisma db push --schema prisma/schema.postgresql.prisma && next build",
+    "db:push": "prisma db push",
+    "db:push:pg": "prisma db push --schema prisma/schema.postgresql.prisma",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:admin": "tsx prisma/ensure-admin.ts",
+    "db:studio": "prisma studio"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "6.2.1",
+    "bcryptjs": "^3.0.3",
+    "next": "^15.5.23",
+    "pdfkit": "^0.19.1",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20.17.12",
+    "@types/pdfkit": "^0.17.6",
+    "@types/react": "^19.0.4",
+    "@types/react-dom": "^19.0.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "prisma": "6.2.1",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vercel": "^59.1.4"
+  }
+}

@@ -1,0 +1,272 @@
+// Postgres variant of the Prisma schema for Vercel production (AssetHub CRM).
+//
+// Usage:
+//   npx prisma generate --schema prisma/schema.postgresql.prisma
+//   npx prisma db push   --schema prisma/schema.postgresql.prisma
+//   npx prisma db seed   --schema prisma/schema.postgresql.prisma
+//
+// Alternatively, simply change `provider = "sqlite"` to `provider = "postgresql"`
+// in prisma/schema.prisma.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  // Direct (non-pooled) connection used by `prisma db push`/migrations — the
+  // pooled `DATABASE_URL` (PgBouncer) can break schema DDL. Runtime stays on
+  // the pooled URL via `url`.
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+model User {
+  id             String          @id @default(cuid())
+  name           String
+  email          String          @unique
+  phone          String?
+  passwordHash   String?
+  role           String          @default("Property Manager")
+  auditLogs      AuditLog[]
+  createdOwners  Owner[]        @relation("OwnerCreatedBy") // owners this manager registered
+  managedOwners  OwnerManager[] // owners assigned to this manager
+  rentOverrides  RentPayment[] // rental payments the manager confirmed without a slip
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @default(now()) @updatedAt
+}
+
+model Owner {
+  id               String          @id @default(cuid())
+  name             String
+  icNumber         String?
+  phone            String?
+  email            String?
+  createdById      String? // the property manager who registered this owner
+  createdBy        User?           @relation("OwnerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  deletedAt        DateTime? // soft delete — keeps history/documents/bills intact
+  properties       PropertyOwner[]
+  assignedManagers OwnerManager[] // additional managers allowed to manage this owner's properties
+  createdAt        DateTime        @default(now())
+}
+
+model Property {
+  id            String          @id @default(cuid())
+  name          String
+  type          String          // Apartment | Condominium | Villa
+  address       String
+  location      String
+  status        PropertyStatus  @default(VACANT)
+  rent          Float           @default(0) // actual rent (not target)
+  rentStartDate DateTime?       // first rent collection date (drives rent due reminders)
+  soldDate      DateTime?       // recorded when the unit is sold
+  deletedAt     DateTime?       // soft delete — keeps documents & older bills intact
+  owners        PropertyOwner[]
+  leases        Lease[]
+  bills         Bill[]
+  expenses      Expense[]
+  annualIncomes AnnualIncome[]
+  documents     Document[]
+  createdAt     DateTime        @default(now())
+}
+
+model PropertyOwner {
+  id           String   @id @default(cuid())
+  propertyId   String
+  ownerId      String
+  sharePercent Float    @default(100)
+  property     Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  owner        Owner    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, ownerId])
+}
+
+// A property manager assigned to help manage an owner's properties.
+model OwnerManager {
+  id      String @id @default(cuid())
+  ownerId String
+  userId  String
+  owner   Owner  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, userId])
+}
+
+model AnnualIncome {
+  id          String   @id @default(cuid())
+  propertyId  String
+  year        Int
+  grossAmount Float
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, year])
+}
+
+model Tenant {
+  id        String     @id @default(cuid())
+  name      String
+  phone     String?
+  email     String?
+  icNumber  String?
+  leases    Lease[]
+  documents Document[]
+  createdAt DateTime   @default(now())
+}
+
+model Lease {
+  id           String        @id @default(cuid())
+  propertyId   String
+  tenantId     String
+  startDate    DateTime
+  endDate      DateTime?
+  monthlyRent  Float
+  deposit      Float         @default(0)
+  status       LeaseStatus   @default(ACTIVE)
+  stampedAt    DateTime?
+  stampingRef  String?
+  property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  rentPayments RentPayment[]
+  reminders    RentReminder[]
+  createdAt    DateTime      @default(now())
+}
+
+model Bill {
+  id          String        @id @default(cuid())
+  propertyId  String
+  type        String        // Electricity | Water | Sewerage | Management Fee | Quit Rent | Assessment Tax
+  provider    String
+  schedule    String        // Monthly | Quarterly | Half-Yearly | Annually
+  amountType  String        // Variable | Fixed
+  fixedAmount Float?
+  year        Int           @default(2026) // billing year for the configured due dates
+  dueDates    String        @default("[]") // JSON array of "YYYY-MM-DD" (pattern for the schedule)
+  remarks     String?       // free text, up to 500 characters
+  property    Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  payments    BillPayment[]
+  createdAt   DateTime      @default(now())
+}
+
+model BillPayment {
+  id         String     @id @default(cuid())
+  billId     String
+  cycle      String     // e.g. "Aug 2026", "Q3 2026"
+  dueDate    DateTime?
+  amount     Float      @default(0)
+  status     BillStatus @default(UNPAID)
+  paidAt     DateTime?
+  receiptUrl String?
+  remarks    String?    // per-cycle remarks, up to 500 characters
+  bill       Bill       @relation(fields: [billId], references: [id], onDelete: Cascade)
+  createdAt  DateTime   @default(now())
+}
+
+model Expense {
+  id          String   @id @default(cuid())
+  propertyId  String
+  category    String
+  description String
+  amount      Float
+  incurredAt  DateTime @default(now())
+  receiptUrl  String?
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+}
+
+model RentPayment {
+  id           String     @id @default(cuid())
+  leaseId      String
+  month        String     // e.g. "2026-08"
+  amount       Float
+  status       BillStatus @default(UNPAID)
+  paidAt       DateTime?
+  receiptUrl   String?    // payment slip (PDF/image) uploaded when marking paid
+  remarks      String?    // per-month notes
+  overrideById String?    // PM who confirmed a paid update without a payment slip
+  overrideAt   DateTime?
+  overrideBy   User?      @relation(fields: [overrideById], references: [id], onDelete: SetNull)
+  lease        Lease      @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+
+  @@unique([leaseId, month])
+}
+
+model RentReminder {
+  id      String    @id @default(cuid())
+  leaseId String
+  month   String    // e.g. "2026-08"
+  stage   String    // D-3 | D+1 | D+3 | ESCALATED
+  message String
+  dueDate DateTime?
+  self    Boolean   @default(false) // true = self WhatsApp escalation (red highlighted)
+  sentAt  DateTime  @default(now())
+  lease   Lease     @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+}
+
+model Document {
+  id         String    @id @default(cuid())
+  propertyId String?
+  tenantId   String?
+  category   String    // Lease Agreement | Receipt | Insurance | Warranty | Title | Compliance
+  title      String
+  fileUrl    String?
+  isStamped  Boolean   @default(false)
+  year       Int?      // lease start year — used for year filtering / grouping
+  leaseFrom  DateTime? // lease start date (tenure) — drives the year search
+  leaseTo    DateTime? // lease end date; null = open-ended (until further notice)
+  uploadedAt DateTime  @default(now())
+  property   Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+  tenant     Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  entityType  String
+  entityId    String?
+  action      String
+  description String
+  userId      String?
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+}
+
+model AiAgentConfig {
+  id                    String   @id @default("default")
+  enabled               Boolean  @default(true)
+  provider              String   @default("mock")
+  model                 String   @default("gpt-4o-mini")
+  systemPrompt          String
+  greeting              String
+  escalationEmail       String?
+  autonomyLevel         String   @default("semi") // semi | full
+  autoRentReminder      Boolean  @default(true)
+  autoMaintenanceTriage Boolean  @default(true)
+  autoViewingSchedule   Boolean  @default(true)
+  tenantNames           String   @default("")
+  updatedAt             DateTime @updatedAt
+}
+
+model ChatMessage {
+  id        String   @id @default(cuid())
+  sessionId String
+  role      String   // ai | tenant
+  content   String
+  createdAt DateTime @default(now())
+}
+
+enum PropertyStatus {
+  LEASED
+  VACANT
+  ARREARS
+  SOLD
+}
+
+enum LeaseStatus {
+  ACTIVE
+  EXPIRED
+  TERMINATED
+  PENDING
+}
+
+enum BillStatus {
+  PAID
+  UNPAID
+}
