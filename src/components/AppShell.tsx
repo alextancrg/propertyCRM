@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cx } from "@/lib/format";
+import { RouteProgress } from "@/components/RouteProgress";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: "fa-chart-pie" },
@@ -14,7 +15,9 @@ const NAV = [
   { href: "/tax", label: "Tax & Audit", icon: "fa-file-invoice-dollar" },
   { href: "/documents", label: "Documents", icon: "fa-folder-open" },
   { href: "/managers", label: "Managers", icon: "fa-user-gear" },
+  { href: "/subscription", label: "Subscription", icon: "fa-crown" },
   { href: "/ai", label: "WhatsApp AI Agent", icon: "fa-robot" },
+  { href: "/support", label: "Support", icon: "fa-life-ring" },
 ];
 
 const TITLES: Record<string, string> = {
@@ -26,8 +29,15 @@ const TITLES: Record<string, string> = {
   "/tax": "Tax & Compliance Audit",
   "/documents": "Document Vault",
   "/managers": "Property Managers",
+  "/subscription": "Subscription & Billing",
   "/ai": "WhatsApp AI Agent",
+  "/support": "Support & Feedback",
 };
+
+// Short-lived cache for the header's user + AI-agent status so full page loads
+// (e.g. F5) render the header instantly and revalidate in the background.
+const SHELL_CACHE_KEY = "assethub:shell:v1";
+const SHELL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -36,18 +46,48 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/ai/config")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (active && d?.config) setAiEnabled(Boolean(d.config.enabled));
+
+    // Hydrate the header instantly from a short-lived session cache (if any),
+    // then revalidate both endpoints in parallel in the background so the
+    // header never blocks first paint on two serverless round-trips.
+    try {
+      const cached = sessionStorage.getItem(SHELL_CACHE_KEY);
+      if (cached) {
+        const data = JSON.parse(cached) as {
+          user?: { id: string; name: string; email: string; role: string } | null;
+          aiEnabled?: boolean | null;
+          ts?: number;
+        };
+        const fresh = typeof data.ts === "number" && Date.now() - data.ts < SHELL_CACHE_TTL;
+        if (data.user) setUser(data.user);
+        // AI status can change; only trust it while fresh.
+        if (fresh && data.aiEnabled !== undefined) setAiEnabled(Boolean(data.aiEnabled));
+      }
+    } catch {
+      // ignore malformed cache
+    }
+
+    Promise.all([
+      fetch("/api/ai/config").then((r) => (r.ok ? r.json() : null)),
+      fetch("/api/auth/me").then((r) => (r.ok ? r.json() : null)),
+    ])
+      .then(([configData, meData]) => {
+        if (!active) return;
+        const nextAi = Boolean(configData?.config?.enabled);
+        const nextUser = meData?.user ?? null;
+        if (configData?.config) setAiEnabled(nextAi);
+        if (meData?.user) setUser(nextUser);
+        try {
+          sessionStorage.setItem(
+            SHELL_CACHE_KEY,
+            JSON.stringify({ user: nextUser, aiEnabled: nextAi, ts: Date.now() }),
+          );
+        } catch {
+          // storage unavailable (private mode etc.) — header still works
+        }
       })
       .catch(() => {});
-    fetch("/api/auth/me")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (active && d?.user) setUser(d.user);
-      })
-      .catch(() => {});
+
     return () => {
       active = false;
     };
@@ -61,7 +101,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const title = TITLES[pathname] ?? "AssetHub";
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <>
+      <RouteProgress />
+      <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col bg-gradient-to-b from-primary-900 to-primary text-white md:flex">
         <div className="flex items-center gap-3 border-b border-white/10 px-6 py-6">
@@ -154,5 +196,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
     </div>
+    </>
   );
 }

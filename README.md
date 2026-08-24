@@ -12,10 +12,12 @@ Built as a spec-driven Next.js app (reference methodology:
 | Module | What it does |
 |--------|--------------|
 | **Dashboard** | KPIs, portfolio P&L snapshot, rent-arrears list, recent AI activity feed. |
-| **Properties & Leases** | Searchable property database with ownership (single / joint-venture %), tenants, rent, lease status & LHDN stamping. |
+| **Properties & Leases** | Searchable property database with ownership (single / joint-venture %), tenants, rent, lease status & LHDN stamping. **Own Stay** units track bills only — no rent collection, excluded from Tax & Audit. |
 | **Bills & Utilities** | Recurring bill schedules (TNB, Air Selangor, Indah Water, JMB, quit rent, assessment), mark-paid with receipt evidence. |
-| **Tax & Audit** | Per-owner LHDN income statements (net taxable = gross − verified expenses), ownership-split distribution, chronological audit trail. |
+| **Tax & Audit** | Per-owner LHDN income statements (net taxable = gross − verified expenses), ownership-split distribution, chronological audit trail. Own-stay expenses are excluded. |
 | **Documents** | Secure filing vault — leases, receipts, insurance, warranties, titles; stamping status; upload. |
+| **Subscription** | Tiered plans (Free → Business) with per-manager property limits, priced in RM and charged yearly via **Stripe Checkout**. |
+| **Support** | Feedback form that emails `assethubmy@gmail.com`; replies go to the logged-in user's email. |
 | **WhatsApp AI Agent** | **Enable/disable toggle**, provider + prompt config, automation behaviours, live test chat, Meta webhook stub. |
 
 ## Tech stack
@@ -127,6 +129,17 @@ the document record + audit trail already stores the resulting URL.
 | `OPENAI_BASE_URL` / `OPENAI_MODEL` | ⬜ | Custom OpenAI-compatible endpoint / model. |
 | `WHATSAPP_VERIFY_TOKEN` | ⬜ | Meta webhook verification token. |
 | `WHATSAPP_ACCESS_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` | ⬜ | Meta Graph API credentials for sending replies. |
+| `STRIPE_SECRET_KEY` | ⬜ | Enables live Stripe Checkout + Billing Portal on `/subscription`. |
+| `STRIPE_WEBHOOK_SECRET` | ⬜ | Signing secret for the `/api/billing/webhook` endpoint. |
+| `STRIPE_PRICE_STARTER` / `STRIPE_PRICE_GROWTH` / `STRIPE_PRICE_PRO` / `STRIPE_PRICE_BUSINESS` | ⬜ | Yearly-recurring Stripe Price IDs for each paid plan. |
+| `NEXT_PUBLIC_APP_URL` | ⬜ | Public origin for Stripe success/cancel URLs (set on Vercel). |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | ⬜ | SMTP server used by the Support page to email feedback. |
+| `SUPPORT_TO_EMAIL` / `SUPPORT_FROM_EMAIL` | ⬜ | Support inbox (default `assethubmy@gmail.com`) and from-address. |
+
+> **Subscriptions without Stripe keys:** in development (non-production) the
+> Subscription page simulates plan changes locally so the flow can be tested
+> without a Stripe account. Add `STRIPE_SECRET_KEY` + `STRIPE_PRICE_*` for real
+> payments, and point a Stripe webhook at `POST /api/billing/webhook`.
 
 ## Scripts
 

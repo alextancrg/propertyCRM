@@ -4,8 +4,15 @@ import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { cx, formatMYR, formatDate } from "@/lib/format";
-import { SCHEDULE_DATE_COUNTS, BILL_MAX_REMARKS, BILL_SCHEDULES, BILL_TYPES } from "@/lib/bills";
+import { SCHEDULE_DATE_COUNTS, BILL_MAX_REMARKS, BILL_SCHEDULES, BILL_TYPES, BILL_RECEIPT_MAX } from "@/lib/bills";
 import { PROPERTY_TYPES } from "@/lib/properties";
+
+type ReceiptDTO = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+};
 
 type PaymentDTO = {
   id: string;
@@ -15,6 +22,7 @@ type PaymentDTO = {
   status: string;
   paidAt: string | null;
   receiptUrl: string | null;
+  receipts: ReceiptDTO[];
   remarks: string | null;
 };
 
@@ -100,6 +108,11 @@ export function BillsClient({ properties }: { properties: PropertyDTO[] }) {
         <div>
           <h3 className="text-xl font-bold text-slate-900">Utility Payment Dashboard</h3>
           <p className="text-sm text-slate-500">Track recurring bills, due dates and upload payment evidence for tax deductions.</p>
+          <p className="mt-1.5 max-w-2xl text-xs leading-relaxed text-slate-500">
+            <i className="fa-solid fa-circle-info mr-1 text-primary" />
+            These bills are not managed by tenants — they are settled by the property owners / managers. Typical
+            owner-managed bills: <span className="font-medium text-slate-600">Miscellaneous, Sewerage, Management Fees, Assessment Tax, Quit Rent, Repairs &amp; Renovations</span>.
+          </p>
         </div>
         <button onClick={openAdd} className="btn-primary self-start sm:self-auto">
           <i className="fa-solid fa-gear" /> Configure Bill
@@ -267,7 +280,24 @@ function PaymentRow({ payment, bill, onSaved }: { payment: PaymentDTO; bill: Bil
           </span>
         )}
 
-        {payment.receiptUrl ? (
+        {payment.receipts.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {payment.receipts.map((r, i) => (
+              <a
+                key={r.id}
+                href={`/api/uploads/bill-receipt/${r.id}`}
+                download
+                target="_blank"
+                rel="noreferrer"
+                title={r.fileName}
+                className="rounded-lg border border-emerald-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
+              >
+                <i className="fa-solid fa-receipt mr-1" />
+                {payment.receipts.length === 1 ? "Receipt" : `Receipt ${i + 1}`}
+              </a>
+            ))}
+          </div>
+        ) : payment.receiptUrl ? (
           <a
             href={payment.receiptUrl}
             download
@@ -299,31 +329,61 @@ function PaymentRow({ payment, bill, onSaved }: { payment: PaymentDTO; bill: Bil
   );
 }
 
-/** Modal to settle a payment cycle (receipt upload mandatory to mark PAID) or edit its remarks. */
+/** Modal to settle a payment cycle — 1–4 receipts (min 1 when Paid) or edit remarks. */
 function PaymentModal({ payment, bill, onClose, onSaved }: { payment: PaymentDTO; bill: BillDTO; onClose: () => void; onSaved: () => void }) {
-  const isPaid = payment.status === "PAID";
   const [status, setStatus] = useState<"PAID" | "UNPAID">("PAID");
   const [amount, setAmount] = useState<string>(payment.amount ? String(payment.amount) : bill.fixedAmount ? String(bill.fixedAmount) : "");
   const [remarks, setRemarks] = useState(payment.remarks ?? "");
-  const [file, setFile] = useState<File | null>(null);
+  const [existing, setExisting] = useState<ReceiptDTO[]>(payment.receipts ?? []);
+  const [newFiles, setNewFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const totalReceipts = existing.length + newFiles.length;
+  const atMax = totalReceipts >= BILL_RECEIPT_MAX;
+
+  function addFiles(list: FileList | null) {
+    if (!list) return;
+    const additions = Array.from(list).filter((f) => f.size > 0);
+    setNewFiles((prev) => [...prev, ...additions].slice(0, BILL_RECEIPT_MAX - existing.length));
+  }
+
+  function removeNewFile(index: number) {
+    setNewFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function removeExisting(receipt: ReceiptDTO) {
+    try {
+      const res = await fetch(`/api/bills/receipts/${receipt.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error ?? "Failed to remove receipt.");
+      setExisting((prev) => prev.filter((r) => r.id !== receipt.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove the receipt.");
+    }
+  }
 
   async function submit() {
     setSaving(true);
     setError(null);
+
+    // At least 1 receipt (and at most 4) when marking as paid.
+    if (status === "PAID" && totalReceipts < 1) {
+      setError("At least one receipt upload is required to mark this bill as Paid.");
+      setSaving(false);
+      return;
+    }
+    if (totalReceipts > BILL_RECEIPT_MAX) {
+      setError(`A maximum of ${BILL_RECEIPT_MAX} receipts is allowed per bill.`);
+      setSaving(false);
+      return;
+    }
+
     const fd = new FormData();
     fd.set("status", status);
     if (amount) fd.set("amount", amount);
     fd.set("remarks", remarks);
-    if (file) fd.set("file", file);
-
-    // Mandatory receipt when marking as paid (unless already on file).
-    if (status === "PAID" && !file && !payment.receiptUrl) {
-      setError("A receipt upload is mandatory to mark this bill as Paid.");
-      setSaving(false);
-      return;
-    }
+    newFiles.forEach((f) => fd.append("files", f));
 
     try {
       const res = await fetch(`/api/bills/payments/${payment.id}`, { method: "PATCH", body: fd });
@@ -372,19 +432,74 @@ function PaymentModal({ payment, bill, onClose, onSaved }: { payment: PaymentDTO
 
           <div>
             <label className="label mb-1">
-              Receipt {status === "PAID" ? <span className="text-red-500">(mandatory when Paid)</span> : null}
+              Receipts{" "}
+              {status === "PAID" ? (
+                <span className="text-red-500">(min 1 · max {BILL_RECEIPT_MAX})</span>
+              ) : (
+                <span className="text-slate-400">(optional)</span>
+              )}
             </label>
+
+            {existing.length > 0 && (
+              <ul className="mb-2 space-y-1.5">
+                {existing.map((r) => (
+                  <li key={r.id} className="flex items-center justify-between gap-2 rounded-lg border border-emerald-100 bg-emerald-50/40 px-3 py-1.5 text-xs">
+                    <a
+                      href={`/api/uploads/bill-receipt/${r.id}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex min-w-0 items-center gap-1.5 font-semibold text-emerald-700 hover:underline"
+                    >
+                      <i className="fa-solid fa-file" />
+                      <span className="truncate">{r.fileName}</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => removeExisting(r)}
+                      title="Remove receipt"
+                      className="grid h-6 w-6 shrink-0 place-items-center rounded text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                    >
+                      <i className="fa-solid fa-trash-can text-[11px]" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
             <input
               type="file"
+              multiple
               accept="image/*,.pdf"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="input file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold"
+              disabled={atMax}
+              onChange={(e) => addFiles(e.target.files)}
+              className="input file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold disabled:opacity-40"
             />
-            {isPaid && payment.receiptUrl && (
-              <a href={payment.receiptUrl} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:underline">
-                <i className="fa-solid fa-receipt" /> Existing receipt on file
-              </a>
+
+            {newFiles.length > 0 && (
+              <ul className="mt-2 space-y-1.5">
+                {newFiles.map((f, i) => (
+                  <li key={`${f.name}-${i}`} className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs">
+                    <span className="inline-flex min-w-0 items-center gap-1.5 text-slate-700">
+                      <i className="fa-solid fa-file" />
+                      <span className="truncate">{f.name}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeNewFile(i)}
+                      title="Remove file"
+                      className="grid h-6 w-6 shrink-0 place-items-center rounded text-slate-400 transition hover:bg-red-50 hover:text-red-500"
+                    >
+                      <i className="fa-solid fa-xmark" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
+
+            <p className={cx("mt-1.5 text-[11px] font-medium", atMax ? "text-amber-600" : "text-slate-400")}>
+              {totalReceipts}/{BILL_RECEIPT_MAX} receipts —{" "}
+              {status === "PAID" ? "at least 1 required when marking as Paid." : "optional for unpaid drafts."}
+            </p>
           </div>
         </div>
 
@@ -393,7 +508,7 @@ function PaymentModal({ payment, bill, onClose, onSaved }: { payment: PaymentDTO
         <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
           <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
           <button type="button" onClick={submit} disabled={saving} className="btn-primary">
-            {saving ? "Saving…" : status === "PAID" ? "Confirm payment" : "Save"}
+            {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : status === "PAID" ? "Confirm payment" : "Save"}
           </button>
         </div>
       </div>
@@ -601,7 +716,7 @@ function BillFormModal({
         {error && <p className="px-6 pb-2 text-sm font-medium text-red-500">{error}</p>}
         <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
           <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
-          <button type="submit" disabled={saving} className="btn-primary">{saving ? "Saving…" : isEdit ? "Update bill" : "Save configuration"}</button>
+          <button type="submit" disabled={saving} className="btn-primary">{saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : isEdit ? "Update bill" : "Save configuration"}</button>
         </div>
       </form>
     </div>,

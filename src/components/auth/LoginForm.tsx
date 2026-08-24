@@ -73,7 +73,7 @@ export function LoginForm() {
               {error && <p className="text-sm font-medium text-red-500">{error}</p>}
 
               <button type="submit" disabled={saving} className="btn-primary w-full justify-center">
-                {saving ? "Signing in…" : "Sign In"}
+                {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Signing in…</> : "Sign In"}
               </button>
             </div>
           </form>

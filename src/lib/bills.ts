@@ -109,4 +109,8 @@ export function validateDueDates(
   return null;
 }
 
-export const BILL_MAX_REMARKS = 500;
+export const BILL_MAX_REMARKS = 300;
+
+// Maximum number of receipts (PDFs/images) a bill payment can hold. At least 1
+// is mandatory when marking a payment as Paid; up to this many are allowed.
+export const BILL_RECEIPT_MAX = 4;

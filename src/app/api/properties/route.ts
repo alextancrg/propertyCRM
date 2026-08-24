@@ -4,6 +4,8 @@ import { logAudit } from "@/lib/ai";
 import { getSessionUser } from "@/lib/auth";
 import { LeaseStatus, PropertyStatus } from "@prisma/client";
 import { validateOwners, resolveOwnerInput, type OwnerInput } from "@/lib/owners";
+import { PROPERTY_MAX_REMARKS } from "@/lib/properties";
+import { assertCanAddProperty } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -11,11 +13,31 @@ export async function POST(req: NextRequest) {
   const me = await getSessionUser();
   if (!me) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
+  // Enforce the manager's subscription plan limit before adding a new unit.
+  const limitCheck = await assertCanAddProperty(me);
+  if (!limitCheck.ok) {
+    return NextResponse.json(
+      {
+        error: limitCheck.error,
+        code: "PLAN_LIMIT",
+        count: limitCheck.count,
+        limit: limitCheck.limit,
+      },
+      { status: 402 },
+    );
+  }
+
   const body = await req.json().catch(() => ({}));
-  const { name, type, address, location, rent, rentStartDate, owners } = body;
+  const { name, type, address, location, rent, rentStartDate, owners, remarks, isOwnStay } = body;
 
   if (!name || !type) {
     return NextResponse.json({ error: "name and type are required." }, { status: 400 });
+  }
+  if (typeof remarks === "string" && remarks.length > PROPERTY_MAX_REMARKS) {
+    return NextResponse.json(
+      { error: `Remarks must be ${PROPERTY_MAX_REMARKS} characters or fewer.` },
+      { status: 400 },
+    );
   }
 
   const ownerInputs: OwnerInput[] = Array.isArray(owners) ? owners : [];
@@ -42,6 +64,8 @@ export async function POST(req: NextRequest) {
       rent: rent ? Number(rent) : 0,
       rentStartDate: rentStartDate ? new Date(rentStartDate) : null,
       status: PropertyStatus.VACANT,
+      remarks: remarks ? String(remarks).slice(0, PROPERTY_MAX_REMARKS) : null,
+      isOwnStay: isOwnStay === true,
       owners: {
         create: resolvedOwners.map((o) => ({
           ownerId: o.ownerId,

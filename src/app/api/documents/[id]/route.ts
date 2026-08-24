@@ -3,8 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/ai";
 import { getSessionUser } from "@/lib/auth";
 import { visiblePropertyIds } from "@/lib/access";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
 
 export const dynamic = "force-dynamic";
 
@@ -58,16 +56,14 @@ export async function PATCH(
     }
   }
 
-  // Optional file replacement (local storage; use Blob/S3 on Vercel).
-  let fileUrl = existing.fileUrl;
+  // Optional file replacement — bytes persisted in the DB so the download
+  // works on any host.
+  let fileData = existing.fileData;
+  let fileMime = existing.fileMime;
   const file = form?.get("file");
-  if (file instanceof File && file.size > 0 && !process.env.VERCEL) {
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadsDir, { recursive: true });
-    const safeName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    const bytes = Buffer.from(await file.arrayBuffer());
-    await writeFile(path.join(uploadsDir, safeName), bytes);
-    fileUrl = `/uploads/${safeName}`;
+  if (file instanceof File && file.size > 0) {
+    fileData = Buffer.from(await file.arrayBuffer()).toString("base64");
+    fileMime = file.type || "application/octet-stream";
   }
 
   const document = await prisma.document.update({
@@ -81,7 +77,9 @@ export async function PATCH(
       year,
       leaseFrom,
       leaseTo,
-      fileUrl,
+      fileUrl: fileData ? `/api/uploads/document/${id}` : existing.fileUrl,
+      fileData,
+      fileMime,
     },
   });
 

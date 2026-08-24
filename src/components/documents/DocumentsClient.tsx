@@ -383,7 +383,7 @@ function UploadModal({
         <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
           <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
           <button type="submit" disabled={saving} className="btn-primary">
-            {saving ? "Saving…" : isEdit ? "Save changes" : "Upload"}
+            {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : isEdit ? "Save changes" : "Upload"}
           </button>
         </div>
       </form>

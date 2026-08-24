@@ -21,13 +21,16 @@
     "@prisma/client": "6.2.1",
     "bcryptjs": "^3.0.3",
     "next": "^15.5.23",
+    "nodemailer": "^9.0.5",
     "pdfkit": "^0.19.1",
     "react": "19.0.0",
-    "react-dom": "19.0.0"
+    "react-dom": "19.0.0",
+    "stripe": "^22.5.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "^20.17.12",
+    "@types/nodemailer": "^8.0.1",
     "@types/pdfkit": "^0.17.6",
     "@types/react": "^19.0.4",
     "@types/react-dom": "^19.0.2",

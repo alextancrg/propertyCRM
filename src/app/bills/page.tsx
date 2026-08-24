@@ -12,7 +12,7 @@ export default async function BillsPage() {
     where: { deletedAt: null, ...scope },
     include: {
       bills: {
-        include: { payments: { orderBy: { createdAt: "desc" } } },
+        include: { payments: { include: { receipts: true }, orderBy: { createdAt: "desc" } } },
         orderBy: { type: "asc" },
       },
       owners: { include: { owner: true } },
@@ -50,6 +50,12 @@ export default async function BillsPage() {
         status: payment.status,
         paidAt: payment.paidAt?.toISOString() ?? null,
         receiptUrl: payment.receiptUrl,
+        receipts: payment.receipts.map((r) => ({
+          id: r.id,
+          fileName: r.fileName,
+          mimeType: r.mimeType,
+          size: r.size,
+        })),
         remarks: payment.remarks,
       })),
     })),

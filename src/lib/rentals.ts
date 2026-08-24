@@ -130,7 +130,8 @@ export async function buildRentalCollection(
   const leases = await prisma.lease.findMany({
     where: {
       status: "ACTIVE",
-      property: { deletedAt: null, ...(scope ? { id: { in: scope } } : {}) },
+      // Own-stay units have no tenants/rental collection.
+      property: { deletedAt: null, isOwnStay: false, ...(scope ? { id: { in: scope } } : {}) },
     },
     include: { property: true, tenant: true, rentPayments: true },
     orderBy: { startDate: "asc" },

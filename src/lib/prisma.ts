@@ -8,4 +8,7 @@ export const prisma =
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
   });
 
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+// Persist the client on globalThis in every environment so warm serverless
+// invocations (Vercel) reuse the same PrismaClient + connection pool instead of
+// re-instantiating (and re-connecting) on every cold-ish request.
+globalForPrisma.prisma = prisma;

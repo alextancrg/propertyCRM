@@ -36,6 +36,8 @@ export default async function PropertiesPage() {
       location: p.location,
       status: p.status,
       rent: p.rent,
+      remarks: p.remarks,
+      isOwnStay: p.isOwnStay,
       rentStartDate: p.rentStartDate?.toISOString() ?? null,
       soldDate: p.soldDate?.toISOString() ?? null,
       owners: p.owners.map((o) => ({

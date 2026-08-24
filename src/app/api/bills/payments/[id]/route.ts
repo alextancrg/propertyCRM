@@ -3,29 +3,34 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/ai";
 import { getSessionUser } from "@/lib/auth";
 import { BillStatus } from "@prisma/client";
-import { BILL_MAX_REMARKS } from "@/lib/bills";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
+import { BILL_MAX_REMARKS, BILL_RECEIPT_MAX } from "@/lib/bills";
 
 export const dynamic = "force-dynamic";
 
-async function saveUpload(file: File): Promise<string> {
-  const uploadsDir = path.join(process.cwd(), "public", "uploads");
-  await mkdir(uploadsDir, { recursive: true });
-  const safeName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-  const bytes = Buffer.from(await file.arrayBuffer());
-  await writeFile(path.join(uploadsDir, safeName), bytes);
-  return `/uploads/${safeName}`;
+type ParsedFile = { fileName: string; mimeType: string; size: number; data: string };
+
+/** Reads a File and returns its metadata + bytes as base64 (persisted in the
+ *  DB so receipts can be downloaded on any host, including Vercel). */
+async function parseFile(file: File): Promise<ParsedFile> {
+  const buf = Buffer.from(await file.arrayBuffer());
+  return {
+    fileName: file.name.replace(/[^a-zA-Z0-9._-]/g, "_") || "receipt",
+    mimeType: file.type || "application/octet-stream",
+    size: file.size,
+    data: buf.toString("base64"),
+  };
 }
 
 /**
  * Update a bill payment (cycle).
  *
  * Form data:
- *  - status   : "PAID" to mark paid (receipt upload is mandatory), or "UNPAID"
+ *  - status   : "PAID" to mark paid, or "UNPAID"
  *  - amount   : amount paid (optional)
- *  - remarks  : per-cycle remarks (optional, max 500 chars)
- *  - file     : receipt image/PDF (mandatory when status = PAID)
+ *  - remarks  : per-cycle remarks (optional, max 300 chars)
+ *  - files    : 1–4 receipt PDFs/images — at least 1 is mandatory when
+ *               status = PAID, up to 4 total per payment (existing + new).
+ *               A single legacy `file` field is still accepted.
  */
 export async function PATCH(
   req: NextRequest,
@@ -38,11 +43,10 @@ export async function PATCH(
   const status = form?.get("status")?.toString() ?? "PAID";
   const amountRaw = form?.get("amount")?.toString();
   const remarks = form?.get("remarks")?.toString() || null;
-  const file = form?.get("file");
 
   const existing = await prisma.billPayment.findUnique({
     where: { id },
-    include: { bill: { include: { property: true } } },
+    include: { bill: { include: { property: true } }, receipts: true },
   });
   if (!existing) {
     return NextResponse.json({ error: "Payment not found." }, { status: 404 });
@@ -56,24 +60,73 @@ export async function PATCH(
   }
 
   const isPaid = status === "PAID";
-  let receiptUrl: string | null = existing.receiptUrl;
+
+  // Collect new uploads (multiple `files` entries or a legacy single `file`).
+  const rawFiles: File[] = [];
+  if (form) {
+    for (const entry of form.getAll("files")) {
+      if (entry instanceof File && entry.size > 0) rawFiles.push(entry);
+    }
+    const single = form.get("file");
+    if (single instanceof File && single.size > 0) rawFiles.push(single);
+  }
+  // Deduplicate the same selection re-added by the browser.
+  const seen = new Set<string>();
+  const files = rawFiles.filter((f) => {
+    const key = `${f.name}|${f.size}|${f.lastModified}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Existing receipts count (BillReceipt rows, or a legacy single receiptUrl).
+  const existingCount =
+    existing.receipts.length +
+    (existing.receiptUrl && existing.receipts.length === 0 ? 1 : 0);
+  const total = existingCount + files.length;
 
   if (isPaid) {
-    // Receipt upload is mandatory when marking a bill as PAID.
-    if (file instanceof File && file.size > 0) {
-      if (!process.env.VERCEL) {
-        receiptUrl = await saveUpload(file);
-      } else {
-        // On Vercel, use Vercel Blob / S3 — fall back to storing the file name.
-        receiptUrl = `/uploads/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-      }
-    } else if (!receiptUrl) {
+    if (total < 1) {
       return NextResponse.json(
-        { error: "A receipt upload is mandatory to mark this bill as Paid." },
+        { error: "At least one receipt upload is required to mark this bill as Paid." },
+        { status: 400 },
+      );
+    }
+    if (total > BILL_RECEIPT_MAX) {
+      return NextResponse.json(
+        { error: `A maximum of ${BILL_RECEIPT_MAX} receipts is allowed per bill.` },
         { status: 400 },
       );
     }
   }
+
+  // Persist new receipts only when marking as paid.
+  let firstNewId: string | null = null;
+  if (isPaid) {
+    for (const file of files) {
+      const parsed = await parseFile(file);
+      const receipt = await prisma.billReceipt.create({
+        data: {
+          paymentId: id,
+          fileName: parsed.fileName,
+          mimeType: parsed.mimeType,
+          size: parsed.size,
+          data: parsed.data,
+        },
+      });
+      if (!firstNewId) firstNewId = receipt.id;
+    }
+  }
+
+  // receiptUrl feeds legacy single-receipt consumers (payment row, tax list).
+  // It always points at a live receipt (or null when there are none).
+  const receiptUrl: string | null = firstNewId
+    ? `/api/uploads/bill-receipt/${firstNewId}`
+    : isPaid
+      ? existing.receiptUrl
+      : existing.receipts.length
+        ? `/api/uploads/bill-receipt/${existing.receipts[0].id}`
+        : null;
 
   const amount = amountRaw !== undefined && amountRaw !== "" ? Number(amountRaw) : existing.amount;
 
@@ -83,17 +136,17 @@ export async function PATCH(
       status: isPaid ? BillStatus.PAID : BillStatus.UNPAID,
       paidAt: isPaid ? new Date() : existing.paidAt,
       amount: Number.isFinite(amount) ? amount : existing.amount,
-      remarks: remarks,
-      ...(receiptUrl ? { receiptUrl } : {}),
+      remarks,
+      receiptUrl,
     },
-    include: { bill: { include: { property: true } } },
+    include: { bill: { include: { property: true } }, receipts: true },
   });
 
   await logAudit(
     "Bill",
     isPaid ? "PAID" : "UPDATED",
     isPaid
-      ? `Marked ${payment.bill.type} (${payment.bill.provider}) paid for ${payment.bill.property.name} — ${payment.cycle}.`
+      ? `Marked ${payment.bill.type} (${payment.bill.provider}) paid for ${payment.bill.property.name} — ${payment.cycle} (${payment.receipts.length} receipt${payment.receipts.length === 1 ? "" : "s"}).`
       : `Updated payment remarks for ${payment.bill.type} (${payment.bill.provider}) — ${payment.cycle}.`,
     payment.bill.propertyId,
     me.id,

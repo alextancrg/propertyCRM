@@ -32,8 +32,43 @@ model User {
   createdOwners  Owner[]        @relation("OwnerCreatedBy") // owners this manager registered
   managedOwners  OwnerManager[] // owners assigned to this manager
   rentOverrides  RentPayment[] // rental payments the manager confirmed without a slip
+  subscription   Subscription? // the manager's paid plan (Stripe-backed)
+  feedback       Feedback[]    // support messages submitted by this user
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @default(now()) @updatedAt
+}
+
+// A property manager's paid subscription plan (Stripe). The plan is denormalised
+// here so the subscription record carries the plan + status; the property limit
+// is derived from the plan config in src/lib/plans.ts.
+model Subscription {
+  id                   String    @id @default(cuid())
+  userId               String    @unique
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                 String    @default("free") // free | starter | growth | pro | business
+  status               String    @default("active") // active | trialing | past_due | canceled | unpaid
+  propertyLimit        Int?      // denormalised copy; null = unlimited (Business/Admin)
+  stripeCustomerId     String?
+  stripeSubscriptionId String?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @default(now()) @updatedAt
+}
+
+// Support / feedback submissions. Stored so users can review their history and
+// admins can triage. An email is also sent to the support inbox.
+model Feedback {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  name      String
+  email     String // the logged-in user's email (replies go here)
+  category  String  // Feature Request | Bug Report | Question | Other
+  subject   String
+  message   String
+  status    String   @default("new") // new | open | resolved
+  createdAt DateTime @default(now())
 }
 
 model Owner {
@@ -61,6 +96,8 @@ model Property {
   rentStartDate DateTime?       // first rent collection date (drives rent due reminders)
   soldDate      DateTime?       // recorded when the unit is sold
   deletedAt     DateTime?       // soft delete — keeps documents & older bills intact
+  remarks       String?         // free text, up to 300 characters
+  isOwnStay     Boolean         @default(false) // own-stay unit: no rental collection, excluded from tax
   owners        PropertyOwner[]
   leases        Lease[]
   bills         Bill[]
@@ -141,7 +178,7 @@ model Bill {
   fixedAmount Float?
   year        Int           @default(2026) // billing year for the configured due dates
   dueDates    String        @default("[]") // JSON array of "YYYY-MM-DD" (pattern for the schedule)
-  remarks     String?       // free text, up to 500 characters
+  remarks     String?       // free text, up to 300 characters
   property    Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   payments    BillPayment[]
   createdAt   DateTime      @default(now())
@@ -156,9 +193,21 @@ model BillPayment {
   status     BillStatus @default(UNPAID)
   paidAt     DateTime?
   receiptUrl String?
-  remarks    String?    // per-cycle remarks, up to 500 characters
+  remarks    String?    // per-cycle remarks, up to 300 characters
   bill       Bill       @relation(fields: [billId], references: [id], onDelete: Cascade)
+  receipts   BillReceipt[]
   createdAt  DateTime   @default(now())
+}
+
+model BillReceipt {
+  id         String      @id @default(cuid())
+  paymentId  String
+  fileName   String
+  mimeType   String      @default("application/octet-stream")
+  data       String      // base64-encoded file bytes (persisted so downloads work on any host)
+  size       Int         @default(0)
+  payment    BillPayment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  uploadedAt DateTime    @default(now())
 }
 
 model Expense {
@@ -180,6 +229,8 @@ model RentPayment {
   status       BillStatus @default(UNPAID)
   paidAt       DateTime?
   receiptUrl   String?    // payment slip (PDF/image) uploaded when marking paid
+  receiptData  String?    // base64-encoded bytes persisted so slips download on any host
+  receiptMime  String?    // original MIME type of the slip
   remarks      String?    // per-month notes
   overrideById String?    // PM who confirmed a paid update without a payment slip
   overrideAt   DateTime?
@@ -208,6 +259,8 @@ model Document {
   category   String    // Lease Agreement | Receipt | Insurance | Warranty | Title | Compliance
   title      String
   fileUrl    String?
+  fileData   String?   // base64-encoded bytes persisted so documents download on any host
+  fileMime   String?   // original MIME type of the document
   isStamped  Boolean   @default(false)
   year       Int?      // lease start year — used for year filtering / grouping
   leaseFrom  DateTime? // lease start date (tenure) — drives the year search

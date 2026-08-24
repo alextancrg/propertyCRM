@@ -3,9 +3,111 @@
 > Tracked task: run the CRM feature checklist (owners, property managers, login,
 > updated-by, rename, bills). Last updated: 2026-08-24.
 
+## Stripe subscriptions — BLOCKER RESOLVED, full checkout + webhook verified (2026-08-24)
+
+- **Site URL is now `https://assethubmy.vercel.app`** (the user's requested
+  canonical URL; `assethub.vercel.app` is NOT available — taken on Vercel).
+  The `vercel --prod` deploy auto-aliases `propai-crm-one.vercel.app`; after
+  every deploy we must ALSO run
+  `npx vercel alias set <new-deploy>.vercel.app assethubmy.vercel.app` to keep
+  the user-facing URL on the latest code.
+- **Root cause of the 500 `"No such price: '<prod_…>'"`**: the `STRIPE_PRICE_*`
+  env vars held **Product IDs** (`prod_…`), not yearly **Price IDs**
+  (`price_…`). Also, the copied `prod_…` values didn't even match the real
+  products in the Stripe account — the correct products were
+  `prod_V8Bj2Z5JJcpZm8` (Starter), `prod_V8BkGx8elIInl5` (Growth),
+  `prod_V8BlXY5d9A0f1x` (Pro), `prod_V8Bneatgwv0L9P` (Business).
+- **Discovered the Price IDs programmatically** (server-side `STRIPE_SECRET_KEY`
+  was available to the deployed app; a temporary Administrator-only debug route
+  listed `stripe.prices.list`). Correct yearly prices set on Vercel (Production):
+  - `STRIPE_PRICE_STARTER`  = `price_1U7vLsR3YZjosIhHzofjBmnG` (MYR 12,900 = RM 129/yr)
+  - `STRIPE_PRICE_GROWTH`   = `price_1U7vMzR3YZjosIhH20CJjS8e` (MYR 29,900 = RM 299/yr)
+  - `STRIPE_PRICE_PRO`      = `price_1U7vOER3YZjosIhHbbvaRhzM` (MYR 69,900 = RM 699/yr)
+  - `STRIPE_PRICE_BUSINESS` = `price_1U7vPsR3YZjosIhHgLEulKkz` (MYR 129,900 = RM 1,299/yr)
+- **Webhook was missing entirely** (`stripe.webhookEndpoints.list()` → `[]`), so
+  completed checkouts never activated the `Subscription` row. Created the
+  endpoint via the Stripe API (temporary Administrator-only setup route):
+  - URL `https://assethubmy.vercel.app/api/billing/webhook` (enabled,
+    `we_1U7xztR3YZjosIhHLgIMqwHT`), events
+    `checkout.session.completed`, `customer.subscription.updated`,
+    `customer.subscription.deleted`, `invoice.paid`, api version
+    `2026-07-29.dahlia`. Signing secret (shown once at creation) stored as
+    Vercel env `STRIPE_WEBHOOK_SECRET`.
+- **End-to-end verified in the browser (test mode, card 4242 4242 4242 4242):**
+  Upgrade → Stripe Checkout (MYR 299.00/yr Growth, email prefilled) → test
+  payment completes → redirect to `/subscription?success=1` → webhook fires →
+  `/subscription` now shows **Growth as the CURRENT PLAN** (Free/Starter show
+  "Downgrade", Pro/Business show "Upgrade"). Admin is exempt from limits but
+  the `Subscription` row (`planId: growth`, status active, stripe customer +
+  sub ids, period end) is persisted in Neon.
+- **Cleanup**: the two temporary routes (`/api/billing/prices`,
+  `/api/billing/webhook-setup`) were removed; final clean build deployed
+  (`propai-1h4fz4yjq-alex-tan.vercel.app`, aliased to `assethubmy` +
+  `propai-crm-one`); `/api/billing/prices` now 404s. `npm run tsc` green.
+- **Keep** the checkout try/catch error surfacing in
+  `src/app/api/billing/checkout/route.ts` (it's what made this debuggable).
+- Note: `vercel env pull` masks "Sensitive" vars as `[SENSITIVE]`, so Stripe
+  keys/price IDs can't be read back via CLI — debug through the deployed app.
+
+## Subscriptions (Stripe) + Support page (2026-08-24)
+
+- **Tiered subscriptions per property manager** — plans in `src/lib/plans.ts`
+  matching the recommended pricing: **Free** (1 property, RM 0), **Starter**
+  (3, RM 129/yr ≈ RM 10.75/mo), **Growth** (10, RM 299/yr ≈ RM 24.90/mo,
+  Flagship), **Pro** (30, RM 699/yr ≈ RM 58.25/mo), **Business** (unlimited,
+  RM 1,299+/yr).
+- **New `/subscription` page** (nav + server page + `SubscriptionClient`):
+  current-plan banner, property-usage progress bar (count vs limit), renews
+  date, "Manage billing" (Stripe portal), plan-limit warning, and a plan grid
+  with yearly/monthly pricing, features, and Upgrade/Downgrade CTAs.
+- **Stripe payment page** — `POST /api/billing/checkout` creates a yearly
+  recurring **Stripe Checkout Session** (success/cancel redirect back to
+  `/subscription`); `POST /api/billing/portal` opens the **Customer Portal**;
+  `POST /api/billing/webhook` keeps the local `Subscription` row in sync
+  (`checkout.session.completed`, `customer.subscription.updated/deleted`,
+  `invoice.paid`). Stripe Price IDs come from env `STRIPE_PRICE_*`; signing via
+  `STRIPE_WEBHOOK_SECRET`.
+- **Property limit enforcement** — `POST /api/properties` calls
+  `assertCanAddProperty` (limit from the user's plan; Administrators + Business
+  are unlimited) and returns **402 `PLAN_LIMIT`** with an upgrade message. The
+  Add/Edit Property modal shows an **"Upgrade my plan"** link on that error.
+- **Dev-mode simulation** — without `STRIPE_SECRET_KEY`/`STRIPE_PRICE_*`,
+  plan changes are applied locally (dev only, never production) so the whole
+  flow is testable; the UI shows a dev-mode banner.
+- **Support page** — `/support` collects feedback (category / subject / message),
+  stores a `Feedback` row, and emails the support inbox (default
+  `assethubmy@gmail.com`) via SMTP (**nodemailer**) with **Reply-To set to the
+  logged-in user's email**. Users see their submission history; admins see all.
+  When SMTP isn't configured the feedback is still recorded (no email).
+- Schema (both `schema.prisma` + `schema.postgresql.prisma`): new **`Subscription`**
+  and **`Feedback`** models + `User.subscription`/`User.feedback` relations; `db push`
+  applied locally, both schemas validate.
+- New deps: `stripe`, `nodemailer` (+ `@types/nodemailer`). New env vars in
+  `.env.example` + README (`STRIPE_*`, `NEXT_PUBLIC_APP_URL`, `SMTP_*`,
+  `SUPPORT_TO_EMAIL`/`SUPPORT_FROM_EMAIL`).
+- Verified end-to-end in the browser: dev-mode upgrade (Free→Starter), property
+  create blocked at the Free limit (402) then allowed after upgrade (2/3 shown
+  on usage bar), support submission appears in history + mail fallback logged.
+  Test data cleaned up afterwards; `npm run build` green.
+
+## New URL + bills/properties remarks + loading UX (2026-08-24)
+
+- **New live URL: https://assethubmy.vercel.app** — added as a production alias to the latest prod deployment (`vercel alias set`); old `https://propai-crm-one.vercel.app` alias removed. ⚠️ **Permanent change caveat**: on the next `vercel --prod` deploy Vercel re-creates `propai-crm-one.vercel.app` because it is still the project's configured production domain in the dashboard — to make it stick, open **Vercel → project `propai-crm` → Settings → Domains** and set `assethubmy.vercel.app` as the production/primary domain (and remove the old one). Deployment Protection (Vercel SSO) applies to the new alias just like the old one.
+- **Bills & Utilities header**: added a small description clarifying these bills are **not tenant-managed** — they are settled by the property owners/managers — listing typical types: Miscellaneous, Sewerage, Management Fees, Assessment Tax, Quit Rent, Repairs & Renovations.
+- **Remarks**: `Property` gained `remarks String?` (both schema files; `prisma db push` applies the column on deploy). Add/Edit Property form has a remarks textarea (max 300, live counter) shown on the property card. Bill remarks limit lowered 500 → 300 (`BILL_MAX_REMARKS`); new `PROPERTY_MAX_REMARKS = 300` in `src/lib/properties.ts`.
+- **Loading UX**: new `src/app/loading.tsx` (global Suspense fallback) + `src/components/RouteProgress.tsx` (top progress bar on internal link clicks, wired into AppShell) + spinner icons (`fa-solid fa-spinner fa-spin`) on every async action button (bills, properties, rentals, owners, managers, documents, AI settings, login).
+- **Speed**: Prisma client now cached on `globalThis` in production too (warm serverless reuse); AppShell header fetches (`/api/auth/me`, `/api/ai/config`) cached in sessionStorage (5-min TTL) with background revalidation; `preconnect` added for the Font Awesome CDN. `npm run build` verified green; deployed to prod at `assethubmy.vercel.app`.
+
+## Receipt downloads + multi-receipt bills + Own Stay (2026-08-24)
+
+- **Fixed the 404 download bug**: Vercel's serverless filesystem is ephemeral, so the old code stored only a fake `/uploads/<name>` URL on production — downloads 404'd. All uploads now persist the **bytes as base64 in the DB** and are served through a new auth + RBAC-checked route `GET /api/uploads/[kind]/[id]` (`bill-receipt` | `rent-slip` | `document`) with correct Content-Type/Disposition. Fixed on ALL three upload surfaces: bills receipts, rent payment slips, and vault documents.
+- **Bills = up to 4 receipts (min 1 when Paid)**: new `BillReceipt` model (paymentId, fileName, mimeType, data(base64), size). Payment modal uploads multiple files (chips, remove), enforces 1–4 (existing + new), lists existing receipts with download + delete. `PATCH /api/bills/payments/[id]` accepts `files[]`; new `DELETE /api/bills/receipts/[id]` (a paid payment must keep ≥1 receipt; `BillPayment.receiptUrl` is kept in sync with live receipts — cleared when the last one is removed on an unpaid payment).
+- **Own Stay property type**: `Property.isOwnStay Boolean @default(false)` (both schema files). Add/Edit Property form has an **Own Stay** checkbox with an explanation; card shows an **Own Stay** badge. Own-stay units are **excluded from Rental Collection** (`buildRentalCollection` filters `property.isOwnStay: false`) and **excluded from Tax & Audit** (`buildOwnerStatements` + `buildTaxYears` filter them out — their expenses can't offset rental income), but bills/utilities tracking still works.
+- Schema changes on both `schema.prisma` + `schema.postgresql.prisma`: `Property.isOwnStay`, `BillPayment.receipts`, new `BillReceipt`, `RentPayment.receiptData/receiptMime`, `Document.fileData/fileMime`. Deployed + verified live: uploaded 2 test PDFs to a bill → both downloaded with 200/`application/pdf`; reverted the test payment; build green. ⚠️ **Pre-existing broken receipts** (uploaded before this fix, e.g. Sewerage H1 2026 `STMT__3_.pdf`) still 404 — their bytes were never saved; re-upload once via the payment modal to restore them.
+
 ## Deployed to Vercel production + Neon database (2026-08-24)
 
-- **Live URL: https://propai-crm-one.vercel.app** (project `propai-crm`, Vercel team `alex-tan`).
+- **Live URL: https://assethubmy.vercel.app** (project `propai-crm`, Vercel team `alex-tan`).
 - **Online database = Neon (Lakebase) Postgres** project `misty-meadow-15049146` (us-east-1), already attached to the Vercel project via the Postgres integration (`DATABASE_URL` pooled + `DATABASE_URL_UNPOOLED` direct).
 - **Schema pushed to Neon** with `prisma db push --schema prisma/schema.postgresql.prisma` (had to accept dropping legacy `Bill.dueDay` / `Property.targetRent` columns that existed from an older push).
 - **Data exported SQLite → Neon** with `prisma/export-to-pg.cjs` (reads local `dev.db` via a dedicated SQLite client at `prisma/generated/sqlite`, writes to Neon via `prisma/generated/pg`; clears tables first, inserts in FK order). Counts verified identical (3 users, 10 owners, 8 owner-managers, 10 properties, 18 ownership links, 3 annual incomes, 9 tenants, 9 leases, 52 rent payments, 7 bills, 7 bill payments, 9 expenses, 5 documents, 64 audit logs, 1 AI config). Admin login verified on Neon.

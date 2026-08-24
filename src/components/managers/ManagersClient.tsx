@@ -161,7 +161,7 @@ export function ManagersClient({
               Cancel
             </button>
             <button type="submit" disabled={saving} className="btn-primary">
-              {saving ? "Saving…" : editing ? "Save changes" : "Register"}
+              {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : editing ? "Save changes" : "Register"}
             </button>
           </div>
         </form>

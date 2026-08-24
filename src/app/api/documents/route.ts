@@ -3,8 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/ai";
 import { getSessionUser } from "@/lib/auth";
 import { visiblePropertyIds } from "@/lib/access";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
 
 export const dynamic = "force-dynamic";
 
@@ -53,16 +51,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  let fileUrl: string | null = null;
-
-  // Local file storage (dev only). On Vercel use Vercel Blob / S3.
-  if (file instanceof File && file.size > 0 && !process.env.VERCEL) {
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    await mkdir(uploadsDir, { recursive: true });
-    const safeName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-    const bytes = Buffer.from(await file.arrayBuffer());
-    await writeFile(path.join(uploadsDir, safeName), bytes);
-    fileUrl = `/uploads/${safeName}`;
+  // File bytes are persisted in the DB (base64) so documents download on any
+  // host — Vercel's serverless filesystem is ephemeral.
+  let fileData: string | null = null;
+  let fileMime: string | null = null;
+  if (file instanceof File && file.size > 0) {
+    fileData = Buffer.from(await file.arrayBuffer()).toString("base64");
+    fileMime = file.type || "application/octet-stream";
   }
 
   const document = await prisma.document.create({
@@ -75,9 +70,18 @@ export async function POST(req: NextRequest) {
       year,
       leaseFrom,
       leaseTo,
-      fileUrl,
+      fileData,
+      fileMime,
     },
   });
+
+  // Serve URL reads the persisted bytes from the DB.
+  if (fileData) {
+    await prisma.document.update({
+      where: { id: document.id },
+      data: { fileUrl: `/api/uploads/document/${document.id}` },
+    });
+  }
 
   await logAudit("Document", "UPLOADED", `Document filed: ${title} (${category}).`, propertyId ?? undefined, me.id);
   return NextResponse.json({ ok: true, document });

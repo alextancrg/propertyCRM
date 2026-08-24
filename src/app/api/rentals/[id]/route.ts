@@ -5,18 +5,14 @@ import { getSessionUser } from "@/lib/auth";
 import { BillStatus } from "@prisma/client";
 import { monthLabel } from "@/lib/rentals";
 import { formatMYR } from "@/lib/format";
-import { writeFile, mkdir } from "fs/promises";
-import path from "path";
 
 export const dynamic = "force-dynamic";
 
-async function saveUpload(file: File): Promise<string> {
-  const uploadsDir = path.join(process.cwd(), "public", "uploads");
-  await mkdir(uploadsDir, { recursive: true });
-  const safeName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
-  const bytes = Buffer.from(await file.arrayBuffer());
-  await writeFile(path.join(uploadsDir, safeName), bytes);
-  return `/uploads/${safeName}`;
+/** Payment slip bytes as base64, persisted in the DB so slips download on any
+ *  host (Vercel's serverless filesystem is ephemeral). */
+async function parseSlip(file: File): Promise<{ data: string; mime: string }> {
+  const buf = Buffer.from(await file.arrayBuffer());
+  return { data: buf.toString("base64"), mime: file.type || "application/octet-stream" };
 }
 
 /**
@@ -55,14 +51,17 @@ export async function PATCH(
 
   const isPaid = status === "PAID";
   let receiptUrl: string | null = existing.receiptUrl;
+  let receiptData: string | null = existing.receiptData;
+  let receiptMime: string | null = existing.receiptMime;
   let overrideById: string | null = existing.overrideById;
   let overrideAt: Date | null = existing.overrideAt;
 
   if (isPaid) {
     if (file instanceof File && file.size > 0) {
-      receiptUrl = process.env.VERCEL
-        ? `/uploads/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`
-        : await saveUpload(file);
+      const parsed = await parseSlip(file);
+      receiptData = parsed.data;
+      receiptMime = parsed.mime;
+      receiptUrl = `/api/uploads/rent-slip/${id}`;
     }
     if (!receiptUrl) {
       // No payment slip -> a Property Manager override confirmation is required.
@@ -81,6 +80,8 @@ export async function PATCH(
   } else {
     // Saving as unpaid resets any slip/override state.
     receiptUrl = null;
+    receiptData = null;
+    receiptMime = null;
     overrideById = null;
     overrideAt = null;
   }
@@ -96,6 +97,8 @@ export async function PATCH(
       amount: Number.isFinite(amount) ? amount : existing.amount,
       remarks: remarks,
       receiptUrl,
+      receiptData,
+      receiptMime,
       overrideById,
       overrideAt,
     },

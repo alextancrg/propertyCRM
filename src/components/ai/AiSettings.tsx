@@ -249,7 +249,7 @@ export function AiSettings({
           </div>
 
           <button type="submit" disabled={saving} className="btn-primary w-full justify-center">
-            {saving ? "Saving…" : "Save configuration"}
+            {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : "Save configuration"}
           </button>
 
           <div className="rounded-xl bg-slate-50 p-4 text-xs leading-relaxed text-slate-500">

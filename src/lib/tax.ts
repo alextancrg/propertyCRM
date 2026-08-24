@@ -24,14 +24,21 @@ export type OwnerStatement = { id: string; name: string; icNumber: string | null
 export async function buildTaxYears(): Promise<number[]> {
   const set = new Set<number>([new Date().getFullYear()]);
   const [income, bills, expenses, rentPayments] = await Promise.all([
-    prisma.annualIncome.findMany({ distinct: ["year"], select: { year: true } }),
+    prisma.annualIncome.findMany({
+      where: { property: { isOwnStay: false } },
+      distinct: ["year"],
+      select: { year: true },
+    }),
     prisma.billPayment.findMany({
-      where: { receiptUrl: { not: null } },
+      where: { receiptUrl: { not: null }, bill: { property: { isOwnStay: false } } },
       select: { dueDate: true, paidAt: true },
     }),
-    prisma.expense.findMany({ select: { incurredAt: true } }),
+    prisma.expense.findMany({
+      where: { property: { isOwnStay: false } },
+      select: { incurredAt: true },
+    }),
     prisma.rentPayment.findMany({
-      where: { status: BillStatus.PAID },
+      where: { status: BillStatus.PAID, lease: { property: { isOwnStay: false } } },
       select: { month: true },
     }),
   ]);
@@ -60,13 +67,15 @@ export async function buildOwnerStatements(
     },
     include: {
       properties: {
-        where: { property: { deletedAt: null } },
+        // Own-stay units are excluded from Tax & Audit — their expenses cannot
+        // offset rental income.
+        where: { property: { deletedAt: null, isOwnStay: false } },
         include: {
           property: {
             include: {
               annualIncomes: true,
               expenses: true,
-              bills: { include: { payments: true } },
+              bills: { include: { payments: { include: { receipts: true } } } },
               leases: { include: { rentPayments: true } },
             },
           },
@@ -100,18 +109,31 @@ export async function buildOwnerStatements(
         const net = gross - expenses;
         const share = (net * po.sharePercent) / 100;
         totalNet += share;
+
+        // Receipts attached to this year's bill payments (1–4 per payment).
         const receipts = p.bills.flatMap((b) =>
-          b.payments
-            .filter(
-              (pay) => pay.receiptUrl && (pay.paidAt?.getFullYear() ?? pay.dueDate?.getFullYear()) === year,
-            )
-            .map((pay) => ({
-              id: pay.id,
-              label: `${b.type} — ${pay.cycle}`,
-              url: pay.receiptUrl,
+          b.payments.flatMap((pay) => {
+            const inYear = (pay.paidAt?.getFullYear() ?? pay.dueDate?.getFullYear()) === year;
+            if (!inYear) return [];
+            const items = (pay.receipts ?? []).map((r) => ({
+              id: r.id,
+              label: `${b.type} — ${pay.cycle} (${r.fileName})`,
+              url: `/api/uploads/bill-receipt/${r.id}`,
               paidAt: pay.paidAt?.toISOString() ?? null,
-            })),
+            }));
+            // Legacy single receipt (no BillReceipt rows) is still listed.
+            if (pay.receiptUrl && (pay.receipts ?? []).length === 0) {
+              items.push({
+                id: pay.id,
+                label: `${b.type} — ${pay.cycle}`,
+                url: pay.receiptUrl,
+                paidAt: pay.paidAt?.toISOString() ?? null,
+              });
+            }
+            return items;
+          }),
         );
+
         return {
           id: p.id,
           name: p.name,

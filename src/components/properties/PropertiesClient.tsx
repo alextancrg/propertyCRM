@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cx, formatMYR, formatDate, initials } from "@/lib/format";
-import { PROPERTY_TYPES } from "@/lib/properties";
+import { PROPERTY_TYPES, PROPERTY_MAX_REMARKS } from "@/lib/properties";
 
 type PropertyDTO = {
   id: string;
@@ -15,6 +15,8 @@ type PropertyDTO = {
   location: string;
   status: string;
   rent: number;
+  remarks: string | null;
+  isOwnStay: boolean;
   rentStartDate: string | null;
   soldDate: string | null;
   owners: { ownerId: string; name: string; phone: string | null; icNumber: string | null; sharePercent: number }[];
@@ -181,6 +183,11 @@ export function PropertiesClient({
                         <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">
                           {p.type}
                         </span>
+                        {p.isOwnStay && (
+                          <span className="rounded bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-700">
+                            <i className="fa-solid fa-house-user mr-0.5" /> Own Stay
+                          </span>
+                        )}
                         <span className="text-xs text-slate-500">
                           <i className="fa-solid fa-location-dot mr-1" />
                           {p.location}
@@ -256,6 +263,12 @@ export function PropertiesClient({
                       )}
                     </div>
                   </div>
+
+                  {p.remarks && (
+                    <InfoBlock label="Remarks">
+                      <p className="text-xs leading-relaxed text-slate-600">{p.remarks}</p>
+                    </InfoBlock>
+                  )}
                 </div>
 
                 <div className="mt-auto grid grid-cols-3 gap-2 border-t border-slate-100 bg-slate-50/60 p-4">
@@ -383,7 +396,7 @@ function DeleteConfirmModal({
             Cancel
           </button>
           <button type="submit" disabled={!match || saving} className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-600 disabled:opacity-40">
-            {saving ? "Deleting…" : confirmLabel}
+            {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Deleting…</> : confirmLabel}
           </button>
         </div>
       </form>
@@ -428,7 +441,10 @@ function PropertyFormModal({
   const isEdit = Boolean(property);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [limitHit, setLimitHit] = useState(false);
   const [status, setStatus] = useState<string>(property?.status ?? "VACANT");
+  const [remarks, setRemarks] = useState(property?.remarks ?? "");
+  const [isOwnStay, setIsOwnStay] = useState(property?.isOwnStay ?? false);
   const [soldDate, setSoldDate] = useState(property?.soldDate ? property.soldDate.slice(0, 10) : "");
   // Rent (RM) and Monthly rent (RM) stay in sync — entering one sets the other.
   const [rentAmount, setRentAmount] = useState<string>(() =>
@@ -498,6 +514,8 @@ function PropertyFormModal({
       address: fd.get("address"),
       location: fd.get("location"),
       rent: rentAmount === "" ? undefined : Number(rentAmount),
+      remarks,
+      isOwnStay,
       rentStartDate: fd.get("rentStartDate") || null,
       status,
       soldDate: status === "SOLD" ? soldDate || null : null,
@@ -520,7 +538,10 @@ function PropertyFormModal({
         body: JSON.stringify(payload),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error ?? "Failed to save property.");
+      if (!res.ok) {
+        if (data?.code === "PLAN_LIMIT") setLimitHit(true);
+        throw new Error(data?.error ?? "Failed to save property.");
+      }
       onSaved();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save the property. Please try again.");
@@ -548,6 +569,18 @@ function PropertyFormModal({
           </Field>
           <Field label="Address" name="address" defaultValue={property?.address} placeholder="Street address" />
           <Field label="Location" name="location" defaultValue={property?.location} placeholder="e.g. TTDI, KL" />
+          <div className="sm:col-span-2">
+            <label className="label mb-1">
+              Remarks <span className="normal-case text-slate-400">({remarks.length}/{PROPERTY_MAX_REMARKS})</span>
+            </label>
+            <textarea
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value.slice(0, PROPERTY_MAX_REMARKS))}
+              rows={2}
+              className="input resize-none"
+              placeholder="Notes about this unit, e.g. key handover, maintenance, tenancy quirks, etc."
+            />
+          </div>
           <div>
             <label className="label mb-1">Rent (RM)</label>
             <input name="rent" type="number" value={rentAmount} onChange={(e) => setRentAmount(e.target.value)} className="input" placeholder="1500" />
@@ -584,6 +617,24 @@ function PropertyFormModal({
               />
             </div>
           )}
+
+          {/* Own Stay */}
+          <div className="sm:col-span-2">
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+              <input
+                type="checkbox"
+                checked={isOwnStay}
+                onChange={(e) => setIsOwnStay(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+              />
+              <span className="text-xs text-slate-600">
+                <span className="font-bold text-slate-800">Own Stay</span> — the owner stays in this unit. There is{" "}
+                <span className="font-semibold text-slate-700">no rental collection</span>, and it is{" "}
+                <span className="font-semibold text-slate-700">excluded from Tax &amp; Audit</span> (own-stay expenses
+                cannot offset rental income). Bills can still be tracked.
+              </span>
+            </label>
+          </div>
 
           {/* Owners */}
           <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50/40 p-4">
@@ -718,14 +769,26 @@ function PropertyFormModal({
           </div>
         </div>
 
-        {error && <p className="px-6 pb-2 text-sm font-medium text-red-500">{error}</p>}
+        {error && (
+          <div className="px-6 pb-2">
+            <p className="text-sm font-medium text-red-500">{error}</p>
+            {limitHit && (
+              <a
+                href="/subscription"
+                className="mt-1 inline-flex items-center gap-1 text-sm font-bold text-primary hover:underline"
+              >
+                <i className="fa-solid fa-crown" /> Upgrade my plan
+              </a>
+            )}
+          </div>
+        )}
 
         <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
           <button type="button" onClick={onClose} className="btn-ghost">
             Cancel
           </button>
           <button type="submit" disabled={saving || shareExceeded} className="btn-primary">
-            {saving ? "Saving…" : isEdit ? "Update property" : "Save property"}
+            {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : isEdit ? "Update property" : "Save property"}
           </button>
         </div>
       </form>

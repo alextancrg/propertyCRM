@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { BillStatus, LeaseStatus, PropertyStatus } from "@prisma/client";
 import { generateBillCycles } from "@/lib/bills";
 import { resolveOwnerInput, validateOwners, type OwnerInput } from "@/lib/owners";
+import { PROPERTY_MAX_REMARKS } from "@/lib/properties";
 
 export const dynamic = "force-dynamic";
 
@@ -117,6 +118,13 @@ export async function PATCH(
           : existing.rentStartDate,
       status: newStatus,
       soldDate,
+      isOwnStay: typeof body.isOwnStay === "boolean" ? body.isOwnStay : existing.isOwnStay,
+      remarks:
+        body.remarks !== undefined
+          ? body.remarks
+            ? String(body.remarks).slice(0, PROPERTY_MAX_REMARKS)
+            : null
+          : existing.remarks,
     },
   });
 

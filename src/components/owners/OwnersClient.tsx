@@ -147,7 +147,7 @@ export function OwnersClient({
               Cancel
             </button>
             <button type="submit" disabled={saving} className="btn-primary">
-              {saving ? "Saving…" : editing ? "Save changes" : "Register"}
+              {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : editing ? "Save changes" : "Register"}
             </button>
           </div>
         </form>
@@ -334,7 +334,7 @@ function AssignManagersModal({
             Cancel
           </button>
           <button type="button" onClick={save} disabled={saving} className="btn-primary">
-            {saving ? "Saving…" : "Save assignments"}
+            {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : "Save assignments"}
           </button>
         </div>
       </div>
@@ -408,7 +408,7 @@ function DeleteOwnerModal({
             disabled={!match || saving}
             className="rounded-lg bg-red-500 px-4 py-2 text-sm font-bold text-white transition hover:bg-red-600 disabled:opacity-40"
           >
-            {saving ? "Deleting…" : "Delete owner"}
+            {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Deleting…</> : "Delete owner"}
           </button>
         </div>
       </form>
