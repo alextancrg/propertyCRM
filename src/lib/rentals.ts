@@ -134,7 +134,8 @@ export async function buildRentalCollection(
       property: { deletedAt: null, isOwnStay: false, ...(scope ? { id: { in: scope } } : {}) },
     },
     include: { property: true, tenant: true, rentPayments: true },
-    orderBy: { startDate: "asc" },
+    // Reverse chronology — the latest lease/rent activity first.
+    orderBy: { startDate: "desc" },
   });
 
   await ensureRentPayments(leases, now);
@@ -144,7 +145,8 @@ export async function buildRentalCollection(
     include: {
       property: true,
       tenant: true,
-      rentPayments: { orderBy: { month: "asc" } },
+      // Reverse chronology — the most recent month at the top.
+      rentPayments: { orderBy: { month: "desc" } },
     },
   });
 

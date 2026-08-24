@@ -12,11 +12,15 @@ type TaxProperty = {
   name: string;
   sharePercent: number;
   gross: number;
+  grossCollected: number;
+  manualRent: number;
   expenses: number;
+  billExpenses: number;
   net: number;
   share: number;
   hasIncome: boolean;
   expenseItems: ExpenseItem[];
+  manualExpenseItems: ExpenseItem[];
   receipts: Receipt[];
 };
 
@@ -52,9 +56,13 @@ export function TaxClient({
   const [year, setYear] = useState<number>(years[0] ?? new Date().getFullYear());
   const [exporting, setExporting] = useState(false);
   const [editing, setEditing] = useState<{ property: TaxProperty; year: number } | null>(null);
+  const [query, setQuery] = useState("");
 
   const owner = statements.find((s) => s.id === ownerId) ?? statements[0];
   const yr = owner?.years.find((y) => y.year === year);
+  const filteredProperties = (yr?.properties ?? []).filter(
+    (p) => !query || p.name.toLowerCase().includes(query.toLowerCase()),
+  );
 
   async function exportPdf() {
     if (!owner || !yr) return;
@@ -121,9 +129,20 @@ export function TaxClient({
         <div className="card p-12 text-center text-slate-500">No owner statements available.</div>
       ) : (
         <div className="space-y-5">
-          <div className="flex items-center gap-3 border-b border-slate-200 pb-2">
-            <h4 className="text-2xl font-black text-slate-900">Tax Year: {yr.year}</h4>
-            <span className="rounded bg-blue-100 px-2 py-1 text-xs font-bold text-blue-700">Jan 1 – Dec 31</span>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-2">
+            <div className="flex items-center gap-3">
+              <h4 className="text-2xl font-black text-slate-900">Tax Year: {yr.year}</h4>
+              <span className="rounded bg-blue-100 px-2 py-1 text-xs font-bold text-blue-700">Jan 1 – Dec 31</span>
+            </div>
+            <div className="relative w-full sm:w-72">
+              <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by property name…"
+                className="input pl-11"
+              />
+            </div>
           </div>
 
           {/* Summary banner */}
@@ -149,12 +168,14 @@ export function TaxClient({
           </div>
 
           {/* Per-property cards */}
-          {yr.properties.length === 0 ? (
+          {filteredProperties.length === 0 ? (
             <div className="card p-10 text-center text-slate-400">
-              No properties with recorded income for {yr.year}. Rent collected (paid) under Rental Collection is recorded automatically; you can also use the Edit button on a property to enter a manual amount.
+              {query
+                ? `No properties match “${query}” for ${yr.year}.`
+                : `No properties with recorded income for ${yr.year}. Rent collected (paid) under Rental Collection is recorded automatically; you can also use the Edit button on a property to enter a manual rental collection amount.`}
             </div>
           ) : (
-            yr.properties.map((p) => (
+            filteredProperties.map((p) => (
               <div key={p.id} className="card overflow-hidden">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-5 py-4">
                   <div>
@@ -170,18 +191,27 @@ export function TaxClient({
                 </div>
                 <div className="grid grid-cols-1 gap-8 p-6 lg:grid-cols-2">
                   <div className="space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-medium text-slate-600">Gross rental collection</span>
-                      <span className="font-bold text-slate-900">{formatMYR(p.gross)}</span>
+                    <div>
+                      <div className="flex justify-between text-sm">
+                        <span className="font-medium text-slate-600">Gross rental collection</span>
+                        <span className="font-bold text-slate-900">{formatMYR(p.gross)}</span>
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-slate-400">
+                        <span><i className="fa-solid fa-hand-holding-dollar mr-1" /> Collected {formatMYR(p.grossCollected)}</span>
+                        {p.manualRent > 0 && <span><i className="fa-solid fa-plus mr-1" /> Manual {formatMYR(p.manualRent)}</span>}
+                        {p.billExpenses > 0 && <span><i className="fa-solid fa-receipt mr-1" /> Bills {formatMYR(p.billExpenses)}</span>}
+                      </div>
                     </div>
                     <div className="space-y-2 border-l-2 border-red-200 py-1 pl-4">
                       {p.expenseItems.map((e) => (
-                        <div key={e.id} className="flex justify-between text-sm text-slate-500">
-                          <span>(−) {e.description}</span>
-                          <span className="font-medium text-red-500">− {formatMYR(e.amount)}</span>
+                        <div key={e.id} className="flex justify-between gap-2 text-sm text-slate-500">
+                          <span className="min-w-0 truncate">(−) {e.description}</span>
+                          <span className="shrink-0 font-medium text-red-500">− {formatMYR(e.amount)}</span>
                         </div>
                       ))}
-                      {p.expenseItems.length === 0 && <p className="text-xs text-slate-400">No expenses recorded.</p>}
+                      {p.expenseItems.length === 0 && (
+                        <p className="text-xs text-slate-400">No expenses this year — paid bills from Bills &amp; Utilities are totaled automatically.</p>
+                      )}
                     </div>
                     <div className="flex justify-between border-t border-slate-200 pt-3 text-sm">
                       <span className="font-bold text-slate-700">Net property income (before split)</span>
@@ -289,7 +319,7 @@ function EditPropertyModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [gross, setGross] = useState(property.gross ? String(property.gross) : "");
+  const [manualRent, setManualRent] = useState(property.manualRent ? String(property.manualRent) : "");
   const [cat, setCat] = useState("Maintenance");
   const [desc, setDesc] = useState("");
   const [amount, setAmount] = useState("");
@@ -307,14 +337,14 @@ function EditPropertyModal({
     if (!res.ok) throw new Error(data?.error ?? "Failed to save.");
   }
 
-  async function saveGross() {
+  async function saveManualRent() {
     setSaving(true);
     setError(null);
     try {
-      await patch({ grossAmount: Number(gross || 0) });
+      await patch({ manualRent: Number(manualRent || 0) });
       onSaved();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save gross amount.");
+      setError(err instanceof Error ? err.message : "Could not save the manual rental collection.");
       setSaving(false);
     }
   }
@@ -372,25 +402,28 @@ function EditPropertyModal({
             written to the audit trail for LHDN readiness.
           </div>
 
-          {/* Gross rental collection */}
+          {/* Manual additional rental collection */}
           <div>
-            <label className="label mb-1">Gross rental collection (RM) — {year}</label>
+            <label className="label mb-1">Additional manual rental collection (RM) — {year}</label>
             <div className="flex gap-2">
-              <input type="number" value={gross} onChange={(e) => setGross(e.target.value)} className="input" placeholder="0.00" />
-              <button type="button" onClick={saveGross} disabled={saving} className="btn-primary shrink-0">
+              <input type="number" value={manualRent} onChange={(e) => setManualRent(e.target.value)} className="input" placeholder="0.00" />
+              <button type="button" onClick={saveManualRent} disabled={saving} className="btn-primary shrink-0">
                 <i className="fa-solid fa-floppy-disk" /> Save
               </button>
             </div>
+            <p className="mt-1.5 text-[11px] text-slate-400">
+              Adds to the auto-collected rent under Rental Collection (e.g. rent received before the lease started) to form the gross rental collection for {year}.
+            </p>
           </div>
 
-          {/* Expense list */}
+          {/* Manual expense list */}
           <div>
-            <label className="label mb-2">Recorded expenses</label>
-            {property.expenseItems.length === 0 ? (
-              <p className="text-xs italic text-slate-400">No expenses recorded for {year}.</p>
+            <label className="label mb-2">Additional recorded expenses</label>
+            {property.manualExpenseItems.length === 0 ? (
+              <p className="text-xs italic text-slate-400">No additional expenses recorded for {year}.</p>
             ) : (
               <ul className="space-y-2">
-                {property.expenseItems.map((e) => (
+                {property.manualExpenseItems.map((e) => (
                   <li key={e.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 text-sm">
                     <div className="min-w-0">
                       <p className="truncate text-slate-700">{e.description}</p>
@@ -407,6 +440,11 @@ function EditPropertyModal({
               </ul>
             )}
           </div>
+
+          <p className="rounded-xl bg-blue-50/60 p-3 text-[11px] leading-relaxed text-blue-700">
+            <i className="fa-solid fa-circle-info mr-1" />
+            Paid bills from Bills &amp; Utilities are already totaled into expenses automatically — this form only manages additional expenses.
+          </p>
 
           {/* Add expense */}
           <form onSubmit={addExpense} className="rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-4">

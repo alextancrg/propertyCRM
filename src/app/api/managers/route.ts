@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, getSessionUser } from "@/lib/auth";
+import { visibleManagerIds } from "@/lib/access";
 import { logAudit } from "@/lib/ai";
 
 export const dynamic = "force-dynamic";
 
-// List all property managers (requires login).
+// List property managers visible to the caller — Administrators see everyone;
+// Property Managers only see themselves + managers they share visibility with.
 export async function GET() {
   const me = await getSessionUser();
   if (!me) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
+  const scope = await visibleManagerIds(me);
   const managers = await prisma.user.findMany({
+    where: scope ? { id: { in: scope } } : {},
     orderBy: { createdAt: "asc" },
     select: {
       id: true,
@@ -22,7 +26,13 @@ export async function GET() {
       updatedAt: true,
     },
   });
-  return NextResponse.json({ managers });
+  return NextResponse.json({
+    managers: managers.map((m) => ({
+      ...m,
+      createdAt: m.createdAt.toISOString(),
+      updatedAt: m.updatedAt.toISOString(),
+    })),
+  });
 }
 
 // Register a new property manager (Administrators only).

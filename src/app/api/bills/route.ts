@@ -81,6 +81,15 @@ export async function POST(req: NextRequest) {
       year: billYear,
       dueDates: JSON.stringify(dueDatesArr),
       remarks: remarks ? String(remarks).slice(0, BILL_MAX_REMARKS) : null,
+      tenantPrepaid: Boolean(body.tenantPrepaid),
+      tenantPrepayAmount:
+        body.tenantPrepayAmount !== undefined && body.tenantPrepayAmount !== null && body.tenantPrepayAmount !== ""
+          ? Number(body.tenantPrepayAmount)
+          : null,
+      tenantPrepayNote:
+        typeof body.tenantPrepayNote === "string" && body.tenantPrepayNote.trim()
+          ? body.tenantPrepayNote.trim().slice(0, 500)
+          : null,
       payments: {
         create: cycles.map((c) => ({
           cycle: c.cycle,

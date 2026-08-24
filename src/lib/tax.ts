@@ -8,11 +8,15 @@ export type TaxProperty = {
   name: string;
   sharePercent: number;
   gross: number;
+  grossCollected: number;
+  manualRent: number;
   expenses: number;
+  billExpenses: number;
   net: number;
   share: number;
   hasIncome: boolean;
   expenseItems: ExpenseItem[];
+  manualExpenseItems: ExpenseItem[];
   receipts: { id: string; label: string; url: string | null; paidAt: string | null }[];
 };
 
@@ -95,17 +99,35 @@ export async function buildOwnerStatements(
         const p = po.property;
         const income = p.annualIncomes.find((a) => a.year === year);
         // Gross rental collection from the Rental Collection — the sum of rent
-        // marked as collected (PAID) in this tax year. A manual correction
-        // (AnnualIncome.grossAmount) overrides this when set.
+        // marked as collected (PAID) in this tax year.
         const grossCollected = p.leases
           .flatMap((l) => l.rentPayments)
           .filter((rp) => rp.status === BillStatus.PAID && rp.month.startsWith(`${year}-`))
           .reduce((s, rp) => s + rp.amount, 0);
-        const expenseItems: ExpenseItem[] = p.expenses
+        // Manual additional rental collection (e.g. rent collected before the
+        // lease started) — entered via the Edit button, added on top of the
+        // auto-collected rent to form the gross rental collection.
+        const manualRent = income?.manualRent ?? 0;
+        // Expenses declared in Bills & Utilities: the owner-managed bills that
+        // were actually settled (PAID) in this year.
+        const billExpenseItems: ExpenseItem[] = p.bills.flatMap((b) =>
+          b.payments
+            .filter((pay) => pay.status === BillStatus.PAID)
+            .filter((pay) => (pay.paidAt?.getFullYear() ?? pay.dueDate?.getFullYear()) === year)
+            .map((pay) => ({
+              id: `bill-${pay.id}`,
+              category: b.type,
+              description: `${b.type} (${b.provider}) — ${pay.cycle}`,
+              amount: pay.amount,
+            })),
+        );
+        const manualExpenseItems: ExpenseItem[] = p.expenses
           .filter((e) => e.incurredAt.getFullYear() === year)
           .map((e) => ({ id: e.id, category: e.category, description: e.description, amount: e.amount }));
+        const expenseItems = [...billExpenseItems, ...manualExpenseItems];
         const expenses = expenseItems.reduce((s, e) => s + e.amount, 0);
-        const gross = income?.grossAmount ?? grossCollected;
+        const billExpenses = billExpenseItems.reduce((s, e) => s + e.amount, 0);
+        const gross = grossCollected + manualRent;
         const net = gross - expenses;
         const share = (net * po.sharePercent) / 100;
         totalNet += share;
@@ -139,11 +161,15 @@ export async function buildOwnerStatements(
           name: p.name,
           sharePercent: po.sharePercent,
           gross,
+          grossCollected,
+          manualRent,
           expenses,
+          billExpenses,
           net,
           share,
-          hasIncome: Boolean(income) || grossCollected > 0,
+          hasIncome: Boolean(income) || grossCollected > 0 || manualRent > 0,
           expenseItems,
+          manualExpenseItems,
           receipts,
         };
       });

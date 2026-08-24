@@ -114,3 +114,56 @@ export const BILL_MAX_REMARKS = 300;
 // Maximum number of receipts (PDFs/images) a bill payment can hold. At least 1
 // is mandatory when marking a payment as Paid; up to this many are allowed.
 export const BILL_RECEIPT_MAX = 4;
+
+// Number of months each schedule cycle covers — used to derive the tenant
+// prepayment for the total sewerage over the whole lease tenure.
+export const SCHEDULE_MONTHS: Record<BillSchedule, number> = {
+  Monthly: 1,
+  Quarterly: 3,
+  "Half-Yearly": 6,
+  Annually: 12,
+  "One Off": 12,
+};
+
+/** Whole calendar months between a start and an end date (or today). */
+export function monthsBetween(start: Date, end: Date | null, now = new Date()): number {
+  const e = end ?? now;
+  if (e <= start) return 0;
+  return (
+    (e.getFullYear() - start.getFullYear()) * 12 +
+    (e.getMonth() - start.getMonth())
+  );
+}
+
+/**
+ * Compute the tenant prepayment for the total sewerage over the entire lease
+ * tenure. Uses the fixed per-cycle amount × the number of cycles the lease
+ * covers. Open-ended leases are computed up to the billing year's year-end
+ * (a note explains the tenant should top up when the lease is renewed/ends).
+ * Returns null when it cannot be computed (no fixed amount / no lease).
+ */
+export function seweragePrepaySummary(opts: {
+  fixedAmount: number;
+  schedule: BillSchedule;
+  leaseStart: string | null;
+  leaseEnd: string | null;
+  billingYear: number;
+  now?: Date;
+}): { total: number; note: string } | null {
+  const { fixedAmount, schedule, leaseStart, leaseEnd, billingYear, now } = opts;
+  if (!fixedAmount || fixedAmount <= 0 || !leaseStart) return null;
+  const start = new Date(leaseStart);
+  const end = leaseEnd ? new Date(leaseEnd) : new Date(billingYear, 11, 31);
+  const months = monthsBetween(start, end, now);
+  const interval = SCHEDULE_MONTHS[schedule] ?? 1;
+  const cycles = Math.max(1, Math.ceil(months / interval));
+  const total = Math.round(fixedAmount * cycles * 100) / 100;
+  const fmt = (d: Date) => `${MONTHS[d.getMonth()] ?? d.getMonth() + 1} ${d.getFullYear()}`;
+  const span = leaseEnd
+    ? `${fmt(start)} → ${fmt(end)}`
+    : `${fmt(start)} → open-ended (to ${billingYear} year-end)`;
+  return {
+    total,
+    note: `${cycles} × ${schedule} cycle(s) — ${span}. Tenant prepays the total sewerage for the whole lease tenure.`,
+  };
+}

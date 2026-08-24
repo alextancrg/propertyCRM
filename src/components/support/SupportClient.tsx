@@ -60,9 +60,7 @@ export function SupportClient({
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error ?? "Could not submit your message.");
-      setSuccess(
-        `Thank you, ${me.name}! Your message has been sent to ${SUPPORT_EMAIL}. Replies will come to ${me.email}.`,
-      );
+      setSuccess(`Thank you, ${me.name}! Your message has been sent to ${SUPPORT_EMAIL}.`);
       if (data.feedback) setItems((prev) => [data.feedback, ...prev]);
       setSubject("");
       setMessage("");
@@ -93,8 +91,7 @@ export function SupportClient({
             <div>
               <p className="font-bold text-slate-900">Send us a message</p>
               <p className="text-xs text-slate-500">
-                Emailed to <span className="font-semibold text-slate-700">{SUPPORT_EMAIL}</span> — replies go to{" "}
-                <span className="font-semibold text-slate-700">{me.email}</span>.
+                Emailed to <span className="font-semibold text-slate-700">{SUPPORT_EMAIL}</span>.
               </p>
             </div>
           </div>

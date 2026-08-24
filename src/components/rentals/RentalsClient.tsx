@@ -17,6 +17,20 @@ function isOverdue(payment: RentalPaymentDTO, now = new Date()): boolean {
 export function RentalsClient({ rentals }: { rentals: RentalCollectionItem[] }) {
   const router = useRouter();
   const [paying, setPaying] = useState<{ lease: RentalCollectionItem; payment: RentalPaymentDTO } | null>(null);
+  // When there are more than 4 properties, only the latest 3 are expanded by
+  // default; the rest are collapsed. Clicking a card header expands/collapses it.
+  const [collapsed, setCollapsed] = useState<Set<string>>(
+    () => (rentals.length > 4 ? new Set(rentals.slice(3).map((l) => l.id)) : new Set<string>()),
+  );
+
+  function toggleCollapsed(id: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const overdue = rentals.reduce(
     (sum, l) => sum + l.payments.filter((p) => p.status === "UNPAID" && isOverdue(p)).reduce((a, p) => a + p.amount, 0),
@@ -43,6 +57,14 @@ export function RentalsClient({ rentals }: { rentals: RentalCollectionItem[] }) 
         </div>
       </div>
 
+      <div className="flex items-start gap-2.5 rounded-xl border border-sky-100 bg-sky-50/60 px-4 py-3 text-xs leading-relaxed text-sky-800">
+        <i className="fa-solid fa-circle-info mt-0.5 text-sky-500" />
+        <span>
+          Any rent payment is always applied to the <span className="font-bold">earliest unpaid month</span> first.
+          Months are shown <span className="font-bold">newest first</span>.
+        </span>
+      </div>
+
       {/* Metrics */}
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
         <Metric icon="fa-triangle-exclamation" cls="bg-red-50 text-red-500" label="Overdue (RM)" value={formatMYR(overdue)} />
@@ -60,14 +82,19 @@ export function RentalsClient({ rentals }: { rentals: RentalCollectionItem[] }) 
       {rentals.map((lease) => {
         const leaseOverdue = lease.payments.filter((p) => p.status === "UNPAID" && isOverdue(p));
         const leaseDue = lease.payments.filter((p) => p.status === "UNPAID" && !isOverdue(p));
+        const isCollapsed = collapsed.has(lease.id);
         return (
           <div key={lease.id} className="card overflow-hidden">
-            <div className={cx(
-              "flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4",
-              leaseOverdue.length ? "bg-red-50/40 border-red-100"
-                : leaseDue.length ? "bg-amber-50/40 border-amber-100"
-                : "bg-emerald-50/40 border-emerald-100",
-            )}>
+            <button
+              type="button"
+              onClick={() => toggleCollapsed(lease.id)}
+              className={cx(
+                "flex w-full flex-wrap items-center justify-between gap-3 border-b px-6 py-4 text-left transition hover:brightness-[0.98]",
+                leaseOverdue.length ? "bg-red-50/40 border-red-100"
+                  : leaseDue.length ? "bg-amber-50/40 border-amber-100"
+                  : "bg-emerald-50/40 border-emerald-100",
+              )}
+            >
               <div className="flex items-center gap-3">
                 <i className={cx("fa-solid fa-building text-xl", leaseOverdue.length ? "text-red-500" : leaseDue.length ? "text-amber-500" : "text-emerald-600")} />
                 <div>
@@ -80,24 +107,36 @@ export function RentalsClient({ rentals }: { rentals: RentalCollectionItem[] }) 
                   </p>
                 </div>
               </div>
-              {leaseOverdue.length ? (
-                <span className="pill bg-red-100 text-red-700"><i className="fa-solid fa-triangle-exclamation" /> {leaseOverdue.length} overdue</span>
-              ) : leaseDue.length ? (
-                <span className="pill bg-amber-100 text-amber-700"><i className="fa-solid fa-hourglass-half" /> {leaseDue.length} in grace</span>
-              ) : (
-                <span className="pill bg-emerald-100 text-emerald-700"><i className="fa-solid fa-check-circle" /> All Collected</span>
-              )}
-            </div>
+              <div className="flex items-center gap-3">
+                {leaseOverdue.length ? (
+                  <span className="pill bg-red-100 text-red-700"><i className="fa-solid fa-triangle-exclamation" /> {leaseOverdue.length} overdue</span>
+                ) : leaseDue.length ? (
+                  <span className="pill bg-amber-100 text-amber-700"><i className="fa-solid fa-hourglass-half" /> {leaseDue.length} in grace</span>
+                ) : (
+                  <span className="pill bg-emerald-100 text-emerald-700"><i className="fa-solid fa-check-circle" /> All Collected</span>
+                )}
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-slate-500 shadow-sm">
+                  <i className={cx("fa-solid transition-transform", isCollapsed ? "fa-chevron-down" : "fa-chevron-up")} />
+                </span>
+              </div>
+            </button>
 
-            <div className="divide-y divide-slate-100">
-              {lease.payments.map((payment) => (
-                <RentalRow
-                  key={payment.id}
-                  payment={payment}
-                  onOpen={() => setPaying({ lease, payment })}
-                />
-              ))}
-            </div>
+            {isCollapsed ? (
+              <p className="px-6 py-4 text-xs text-slate-400">
+                <i className="fa-regular fa-eye-slash mr-1" />
+                {lease.payments.length} rent month{lease.payments.length === 1 ? "" : "s"} — click the header to expand.
+              </p>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {lease.payments.map((payment) => (
+                  <RentalRow
+                    key={payment.id}
+                    payment={payment}
+                    onOpen={() => setPaying({ lease, payment })}
+                  />
+                ))}
+              </div>
+            )}
           </div>
         );
       })}

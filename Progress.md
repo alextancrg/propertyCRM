@@ -1,7 +1,65 @@
 # AssetHub — Implementation Progress
 
 > Tracked task: run the CRM feature checklist (owners, property managers, login,
-> updated-by, rename, bills). Last updated: 2026-08-24.
+> updated-by, rename, bills). Last updated: 2026-08-25.
+
+## Feature round (2026-08-25) — Tax additions, sewerage prepayment, rental UX, manager sharing
+
+All implemented, browser-verified end-to-end locally + deployed live at
+`assethubmy.vercel.app` (build + tsc green).
+
+- **Tax & Audit — manual rental collection adds, bills auto-total expenses, property search.**
+  - `AnnualIncome` gained `manualRent Float @default(0)` (both schemas). Gross rental
+    collection = auto-collected PAID rent (Rental Collection) **+ manualRent** (e.g.
+    rent received before the lease started). `src/lib/tax.ts` now computes
+    `gross = grossCollected + manualRent`; the Edit modal in `TaxClient` is relabelled
+    "Additional manual rental collection (RM)" and saves `manualRent` (PATCH
+    `/api/tax/property` accepts `manualRent`; legacy `grossAmount` full-override kept for old rows).
+  - **Expenses auto-total from Bills & Utilities**: every PAID `BillPayment` in the
+    year (`paidAt ?? dueDate` year) is now an expense item (`Bill (provider) — cycle`),
+    summed into `expenses` (before only the manual `Expense` model counted). Net property
+    income auto-calculates. DTO has `grossCollected/manualRent/billExpenses/manualExpenseItems`;
+    the card shows "Collected + Manual + Bills" breakdown; PDF export uses the same data.
+  - **Property search box** on the Tax page filters the per-owner year's properties by name.
+- **Bills & Utilities — sewerage tenant prepayment + owner-managed note.**
+  - The owner-managed note (not tenant-managed; typical: Miscellaneous, Sewerage, Management
+    Fees, Assessment Tax, Quit Rent, Repairs & Renovations) was already present.
+  - New: for a **Sewerage** bill with a fixed amount, the Configure Bill form offers
+    "Collect a prepayment from the tenant for the total sewerage over the entire lease
+    tenure" — `src/lib/bills.ts` `seweragePrepaySummary()` computes total = fixed amount ×
+    cycles covered by the property's ACTIVE lease (`SCHEDULE_MONTHS` per schedule; open-ended
+    leases computed to billing year-end with an explanatory note). Stored on the `Bill`
+    (`tenantPrepaid/tenantPrepayAmount/tenantPrepayNote`, both schemas; bills POST/PATCH accept
+    them) and shown as a "Tenant prepaid RM X — whole lease tenure" badge + note on the card.
+    `bills/page.tsx` now passes each property's active lease.
+- **Rental Collection — reverse chronology, collapse/expand, pay-earliest info.**
+  - `buildRentalCollection` orders leases by `startDate desc` and months by `month desc`
+    (newest first). `RentalsClient` shows an info banner ("Any rent payment is always applied
+    to the earliest unpaid month first. Months are shown newest first."), and when there are
+    **>4 properties only the latest 3 are expanded by default** — clicking a card header
+    collapses/expands it (chevron; collapsed shows "N rent months — click the header to expand").
+- **Support — text fix**: "Emailed to assethubmy@gmail.com." (removed "— replies go to …").
+- **Managers — invite by email + accept + shared property visibility.**
+  - New models (both schemas): `ManagerInvitation` (fromUserId, email, status pending/accepted/
+    declined, unique token, toUserId, respondedAt) and `ManagerSharing` (userAId/userBId canonical
+    pair, @@unique). `User` gained `sentInvitations/receivedInvitations/sharingA/sharingB`.
+  - `src/lib/access.ts` `visibleOwnerIds` now unions owners across the **connected component**
+    of the sharing graph (transitive, bidirectional) — so accepted sharing partners see each
+    other's owners/properties. New `visibleManagerIds(user)` (self + partners; null for admin).
+  - API: `POST /api/managers/invite` (by email; emails the invitee best-effort via SMTP),
+    `GET /api/managers/invitations` (sent + received), `POST /api/managers/invitations/[id]/respond`
+    (accept creates the ManagerSharing link / decline). `GET /api/managers` is now scoped
+    (admin = all; PM = self + partners).
+  - Managers page: PM sees "Your team" (self + shared partners with a "Shared visibility" badge),
+    an invite-by-email form, and an Invitations panel (received: Accept/Decline; sent: pending).
+    `ManagersClient.respond` re-fetches `/api/managers` after accept so the partner appears instantly.
+- **Schema**: both `schema.prisma` + `schema.postgresql.prisma` kept in sync; `db push` applied
+  locally + on Neon (additive). Verified live: admin invites a new PM → PM accepts → both appear
+  in each other's team AND the PM sees the admin's property (cross-user shared visibility).
+- ⚠️ Pre-existing, non-fatal: a React hydration warning (#418, "text didn't match") fires on
+  client navigation on **all** pages (incl. untouched ones like `/properties`) — from the
+  AppShell's sessionStorage-cached `/api/auth/me` display; pages still render correctly. Not from
+  this round; left as-is.
 
 ## Stripe subscriptions — BLOCKER RESOLVED, full checkout + webhook verified (2026-08-24)
 

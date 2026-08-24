@@ -8,7 +8,10 @@ export const dynamic = "force-dynamic";
 
 /**
  * Correct a property's tax figures for a given year:
- *  - grossAmount      : set/adjust the annual gross rental collection (upsert)
+ *  - manualRent       : additional manual rental collection (RM) that ADDS to
+ *                       the auto-collected rent (e.g. before the lease) (upsert)
+ *  - grossAmount      : legacy full-override of the annual gross (kept for
+ *                       older records; new code uses manualRent)
  *  - expense          : add an expense { category, description, amount, incurredAt? }
  *  - deleteExpenseId  : remove an expense
  */
@@ -34,8 +37,23 @@ export async function PATCH(req: NextRequest) {
   const y = Number(year);
   const actions: string[] = [];
 
-  // 1) Set / adjust annual gross rental collection.
-  if (body.grossAmount !== undefined) {
+  // 1) Set / adjust the additional manual rental collection (adds to the
+  //    auto-collected rent to form the gross rental collection).
+  if (body.manualRent !== undefined) {
+    const manual = Number(body.manualRent);
+    if (Number.isNaN(manual) || manual < 0) {
+      return NextResponse.json({ error: "manualRent must be a valid non-negative number." }, { status: 400 });
+    }
+    await prisma.annualIncome.upsert({
+      where: { propertyId_year: { propertyId, year: y } },
+      create: { propertyId, year: y, manualRent: manual },
+      update: { manualRent: manual },
+    });
+    actions.push(`set additional manual rental collection to ${manual}`);
+  }
+
+  // 1b) Legacy full-override of the annual gross (kept for older records).
+  if (body.grossAmount !== undefined && body.manualRent === undefined) {
     const gross = Number(body.grossAmount);
     if (Number.isNaN(gross) || gross < 0) {
       return NextResponse.json({ error: "grossAmount must be a valid non-negative number." }, { status: 400 });

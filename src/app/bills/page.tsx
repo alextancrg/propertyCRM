@@ -16,6 +16,11 @@ export default async function BillsPage() {
         orderBy: { type: "asc" },
       },
       owners: { include: { owner: true } },
+      leases: {
+        where: { status: "ACTIVE" },
+        select: { id: true, startDate: true, endDate: true, monthlyRent: true },
+        orderBy: { startDate: "desc" },
+      },
     },
     orderBy: { name: "asc" },
   });
@@ -26,6 +31,14 @@ export default async function BillsPage() {
     type: p.type,
     status: p.status,
     owners: p.owners.map((o) => o.owner.name).join(", "),
+    activeLease: p.leases[0]
+      ? {
+          id: p.leases[0].id,
+          startDate: p.leases[0].startDate.toISOString(),
+          endDate: p.leases[0].endDate?.toISOString() ?? null,
+          monthlyRent: p.leases[0].monthlyRent,
+        }
+      : null,
     bills: p.bills.map((b) => ({
       id: b.id,
       type: b.type,
@@ -42,6 +55,9 @@ export default async function BillsPage() {
         }
       })(),
       remarks: b.remarks,
+      tenantPrepaid: b.tenantPrepaid,
+      tenantPrepayAmount: b.tenantPrepayAmount,
+      tenantPrepayNote: b.tenantPrepayNote,
       payments: b.payments.map((payment) => ({
         id: payment.id,
         cycle: payment.cycle,

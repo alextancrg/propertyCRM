@@ -91,6 +91,20 @@ export async function PATCH(
             ? String(body.remarks).slice(0, BILL_MAX_REMARKS)
             : null
           : existing.remarks,
+      tenantPrepaid:
+        body.tenantPrepaid !== undefined ? Boolean(body.tenantPrepaid) : existing.tenantPrepaid,
+      tenantPrepayAmount:
+        body.tenantPrepayAmount !== undefined && body.tenantPrepayAmount !== null && body.tenantPrepayAmount !== ""
+          ? Number(body.tenantPrepayAmount)
+          : body.tenantPrepaid
+            ? null
+            : existing.tenantPrepayAmount,
+      tenantPrepayNote:
+        body.tenantPrepayNote !== undefined
+          ? body.tenantPrepayNote
+            ? String(body.tenantPrepayNote).slice(0, 500)
+            : null
+          : existing.tenantPrepayNote,
     },
   });
 

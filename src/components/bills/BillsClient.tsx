@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { cx, formatMYR, formatDate } from "@/lib/format";
-import { SCHEDULE_DATE_COUNTS, BILL_MAX_REMARKS, BILL_SCHEDULES, BILL_TYPES, BILL_RECEIPT_MAX } from "@/lib/bills";
+import { SCHEDULE_DATE_COUNTS, BILL_MAX_REMARKS, BILL_SCHEDULES, BILL_TYPES, BILL_RECEIPT_MAX, seweragePrepaySummary, type BillSchedule } from "@/lib/bills";
 import { PROPERTY_TYPES } from "@/lib/properties";
 
 type ReceiptDTO = {
@@ -36,6 +36,9 @@ type BillDTO = {
   year: number;
   dueDates: string[];
   remarks: string | null;
+  tenantPrepaid: boolean;
+  tenantPrepayAmount: number | null;
+  tenantPrepayNote: string | null;
   payments: PaymentDTO[];
 };
 
@@ -45,6 +48,12 @@ type PropertyDTO = {
   type: string;
   status: string;
   owners: string;
+  activeLease: {
+    id: string;
+    startDate: string;
+    endDate: string | null;
+    monthlyRent: number;
+  } | null;
   bills: BillDTO[];
 };
 
@@ -234,6 +243,17 @@ function BillBlock({ bill, onEdit, onSaved }: { bill: BillDTO; onEdit: () => voi
           </button>
         </div>
       </div>
+
+      {bill.tenantPrepaid && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-xs text-emerald-700">
+          <i className="fa-solid fa-sack-dollar" />
+          <span className="font-bold">Tenant prepaid {formatMYR(bill.tenantPrepayAmount ?? 0)}</span>
+          <span className="text-emerald-600/80">for the total sewerage over the whole lease tenure.</span>
+          {bill.tenantPrepayNote && (
+            <span className="w-full text-[11px] leading-relaxed text-emerald-600/70">{bill.tenantPrepayNote}</span>
+          )}
+        </div>
+      )}
 
       {bill.remarks && (
         <p className="mt-2 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
@@ -543,11 +563,33 @@ function BillFormModal({
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [billType, setBillType] = useState(bill?.type ?? "Electricity");
+  const [fixedAmount, setFixedAmount] = useState(bill?.fixedAmount ? String(bill.fixedAmount) : "");
+  const [tenantPrepaid, setTenantPrepaid] = useState(Boolean(bill?.tenantPrepaid));
 
   const selectedProperty = propertyOptions.find((p) => p.id === propId);
   const propSold = !isEdit && selectedProperty?.status === "SOLD";
 
   const dateCount = SCHEDULE_DATE_COUNTS[schedule as keyof typeof SCHEDULE_DATE_COUNTS] ?? 1;
+
+  // Total sewerage prepayment for the whole lease tenure (Sewerage bills only).
+  const prepaySummary =
+    billType === "Sewerage" && tenantPrepaid
+      ? selectedProperty?.activeLease
+        ? seweragePrepaySummary({
+            fixedAmount: Number(fixedAmount || 0),
+            schedule: schedule as BillSchedule,
+            leaseStart: selectedProperty.activeLease.startDate,
+            leaseEnd: selectedProperty.activeLease.endDate,
+            billingYear: year,
+          })
+        : bill?.tenantPrepayAmount
+          ? {
+              total: bill.tenantPrepayAmount,
+              note: bill.tenantPrepayNote ?? "Tenant prepayment recorded for the whole lease tenure.",
+            }
+          : null
+      : null;
 
   function changeSchedule(next: string) {
     setSchedule(next);
@@ -600,6 +642,9 @@ function BillFormModal({
       year: Number(year),
       dueDates,
       remarks,
+      tenantPrepaid: billType === "Sewerage" ? tenantPrepaid : false,
+      tenantPrepayAmount: prepaySummary?.total ?? null,
+      tenantPrepayNote: prepaySummary?.note ?? null,
     };
 
     try {
@@ -652,7 +697,7 @@ function BillFormModal({
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="label mb-1">Bill type</label>
-              <select name="type" className="input cursor-pointer" defaultValue={bill?.type ?? "Electricity"}>
+              <select name="type" value={billType} onChange={(e) => setBillType(e.target.value)} className="input cursor-pointer">
                 {BILL_TYPES.map((t) => (
                   <option key={t}>{t}</option>
                 ))}
@@ -686,7 +731,7 @@ function BillFormModal({
             {amountType === "Fixed" && (
               <div>
                 <label className="label mb-1">Fixed amount (RM)</label>
-                <input name="fixedAmount" type="number" className="input" defaultValue={bill?.fixedAmount ? String(bill.fixedAmount) : undefined} placeholder="650" />
+                <input name="fixedAmount" type="number" value={fixedAmount} onChange={(e) => setFixedAmount(e.target.value)} className="input" placeholder="650" />
               </div>
             )}
           </div>
@@ -705,6 +750,35 @@ function BillFormModal({
               ))}
             </div>
           </div>
+
+          {/* Sewerage tenant prepayment — total sewerage for the whole lease tenure */}
+          {billType === "Sewerage" && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/50 p-4">
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={tenantPrepaid}
+                  onChange={(e) => setTenantPrepaid(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 accent-emerald-600"
+                />
+                <span className="text-xs leading-relaxed text-slate-700">
+                  <span className="font-bold text-slate-800">Collect a prepayment from the tenant</span> for the total
+                  sewerage over the entire lease tenure.
+                </span>
+              </label>
+              {tenantPrepaid && prepaySummary ? (
+                <div className="mt-3 rounded-lg bg-white p-3 text-xs text-emerald-700">
+                  <p className="font-bold">Total prepayment: {formatMYR(prepaySummary.total)}</p>
+                  <p className="mt-1 leading-relaxed text-emerald-600/90">{prepaySummary.note}</p>
+                </div>
+              ) : tenantPrepaid ? (
+                <p className="mt-3 rounded-lg bg-amber-50 p-3 text-xs leading-relaxed text-amber-700">
+                  <i className="fa-solid fa-triangle-exclamation mr-1" />
+                  Set a fixed amount and ensure the property has an active lease to compute the prepayment total.
+                </p>
+              ) : null}
+            </div>
+          )}
 
           <div>
             <label className="label mb-1">

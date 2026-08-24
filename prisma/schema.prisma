@@ -12,20 +12,24 @@ datasource db {
 }
 
 model User {
-  id             String          @id @default(cuid())
-  name           String
-  email          String          @unique
-  phone          String?
-  passwordHash   String?
-  role           String          @default("Property Manager")
-  auditLogs      AuditLog[]
-  createdOwners  Owner[]        @relation("OwnerCreatedBy") // owners this manager registered
-  managedOwners  OwnerManager[] // owners assigned to this manager
-  rentOverrides  RentPayment[] // rental payments the manager confirmed without a slip
-  subscription   Subscription? // the manager's paid plan (Stripe-backed)
-  feedback       Feedback[]    // support messages submitted by this user
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @default(now()) @updatedAt
+  id                  String              @id @default(cuid())
+  name                String
+  email               String              @unique
+  phone               String?
+  passwordHash        String?
+  role                String              @default("Property Manager")
+  auditLogs           AuditLog[]
+  createdOwners       Owner[]             @relation("OwnerCreatedBy") // owners this manager registered
+  managedOwners       OwnerManager[]      // owners assigned to this manager
+  rentOverrides       RentPayment[]       // rental payments the manager confirmed without a slip
+  subscription        Subscription?       // the manager's paid plan (Stripe-backed)
+  feedback            Feedback[]          // support messages submitted by this user
+  sentInvitations     ManagerInvitation[] @relation("InvitationFrom")
+  receivedInvitations ManagerInvitation[] @relation("InvitationTo")
+  sharingA            ManagerSharing[]    @relation("ManagerSharingA")
+  sharingB            ManagerSharing[]    @relation("ManagerSharingB")
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @default(now()) @updatedAt
 }
 
 // A property manager's paid subscription plan (Stripe). The plan is denormalised
@@ -101,7 +105,8 @@ model AnnualIncome {
   id          String   @id @default(cuid())
   propertyId  String
   year        Int
-  grossAmount Float
+  grossAmount Float   @default(0) // legacy full-override (kept for older records)
+  manualRent  Float   @default(0) // additional manual rental collection (e.g. before the lease) — adds to auto-collected rent
   property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 
   @@unique([propertyId, year])
@@ -126,6 +131,35 @@ model OwnerManager {
   user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([ownerId, userId])
+}
+
+// A property manager invitation — add another manager by email to share
+// property visibility. The invitee must accept before visibility is shared.
+model ManagerInvitation {
+  id          String   @id @default(cuid())
+  fromUserId  String
+  fromUser    User     @relation("InvitationFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  email       String   // the invited manager's login email
+  status      String   @default("pending") // pending | accepted | declined
+  token       String   @unique
+  toUserId    String?  // set when accepted — the invited user
+  toUser      User?    @relation("InvitationTo", fields: [toUserId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  respondedAt DateTime?
+}
+
+// An accepted, bidirectional visibility link between two property managers.
+// Sharing is transitive: managers in the same connected component of this
+// graph see each other's properties.
+model ManagerSharing {
+  id        String   @id @default(cuid())
+  userAId   String
+  userBId   String
+  userA     User     @relation("ManagerSharingA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB     User     @relation("ManagerSharingB", fields: [userBId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userAId, userBId])
 }
 model Tenant {
   id         String   @id @default(cuid())
@@ -164,10 +198,13 @@ model Bill {
   schedule    String        // Monthly | Quarterly | Half-Yearly | Annually
   amountType  String        // Variable | Fixed
   fixedAmount Float?
-  year        Int           @default(2026) // billing year for the configured due dates
-  dueDates    String        @default("[]") // JSON array of "YYYY-MM-DD" (pattern for the schedule)
-  remarks     String?       // free text, up to 300 characters
-  property    Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  year             Int           @default(2026) // billing year for the configured due dates
+  dueDates         String        @default("[]") // JSON array of "YYYY-MM-DD" (pattern for the schedule)
+  remarks          String?       // free text, up to 300 characters
+  tenantPrepaid    Boolean       @default(false) // tenant prepaid the total sewerage for the whole lease tenure
+  tenantPrepayAmount Float?      // RM collected up front from the tenant
+  tenantPrepayNote String?       // how the prepayment was computed (tenure span x rate)
+  property         Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   payments    BillPayment[]
   createdAt   DateTime      @default(now())
 }
