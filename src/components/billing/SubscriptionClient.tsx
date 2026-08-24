@@ -36,6 +36,11 @@ const PLAN_ICONS: Record<string, string> = {
   business: "fa-building",
 };
 
+/** The date the current plan stops being available after cancellation (period end minus a day). */
+function availableUntil(iso: string): string {
+  return formatDate(new Date(new Date(iso).getTime() - 24 * 60 * 60 * 1000).toISOString());
+}
+
 export function SubscriptionClient({
   isAdmin,
   subscription,
@@ -113,8 +118,9 @@ export function SubscriptionClient({
     }
   }
 
-  const statusLabel =
-    subscription.status === "active"
+  const statusLabel = subscription.cancelAtPeriodEnd
+    ? "Canceled"
+    : subscription.status === "active"
       ? "Active"
       : subscription.status === "trialing"
         ? "Trialing"
@@ -157,7 +163,7 @@ export function SubscriptionClient({
               <p className="text-sm text-blue-200">
                 {isAdmin
                   ? "Admins manage the whole portfolio without a plan limit."
-                  : `${subscription.planTagline} · ${subscription.cancelAtPeriodEnd ? "cancels at period end" : "yearly billing"}`}
+                  : `${subscription.planTagline} · ${subscription.cancelAtPeriodEnd ? "Subscription cancelled" : "yearly billing"}`}
               </p>
             </div>
           </div>
@@ -201,10 +207,23 @@ export function SubscriptionClient({
             </div>
             <div className="mt-3 flex flex-col gap-1 text-xs text-slate-500 sm:flex-row sm:items-center sm:justify-between">
               <span>
-                <i className="fa-solid fa-calendar-day mr-1" />
-                {subscription.currentPeriodEnd
-                  ? `Renews ${formatDate(subscription.currentPeriodEnd)}`
-                  : "Free plan — no renewal date"}
+                {subscription.cancelAtPeriodEnd ? (
+                  <>
+                    <i className="fa-solid fa-ban mr-1 text-amber-500" />
+                    <span className="font-semibold text-slate-700">Subscription cancelled</span> — current plan
+                    available until{" "}
+                    <span className="font-semibold text-slate-700">
+                      {subscription.currentPeriodEnd ? availableUntil(subscription.currentPeriodEnd) : "period end"}
+                    </span>
+                  </>
+                ) : subscription.currentPeriodEnd ? (
+                  <>
+                    <i className="fa-solid fa-calendar-day mr-1" />
+                    Renews {formatDate(subscription.currentPeriodEnd)}
+                  </>
+                ) : (
+                  "Free plan — no renewal date"
+                )}
               </span>
               {atLimit && (
                 <span className="font-semibold text-amber-600">

@@ -37,6 +37,11 @@ export function OwnersClient({
   const [form, setForm] = useState({ name: "", icNumber: "", phone: "", email: "" });
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const filteredOwners = owners.filter(
+    (o) => !query || o.name.toLowerCase().includes(query.toLowerCase()),
+  );
 
   function resetForm() {
     setForm({ name: "", icNumber: "", phone: "", email: "" });
@@ -115,6 +120,17 @@ export function OwnersClient({
         </button>
       </div>
 
+      {/* Search owners by name */}
+      <div className="relative">
+        <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search owners by name…"
+          className="input pl-11"
+        />
+      </div>
+
       {/* Register / edit form */}
       {showForm && (
         <form onSubmit={submit} className="card grid gap-4 p-6">
@@ -155,7 +171,7 @@ export function OwnersClient({
 
       {/* Owners list */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        {owners.map((o) => (
+        {filteredOwners.map((o) => (
           <div key={o.id} className="card p-5">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
@@ -207,8 +223,10 @@ export function OwnersClient({
             </div>
           </div>
         ))}
-        {owners.length === 0 && (
-          <p className="text-sm text-slate-400">No owners registered yet.</p>
+        {filteredOwners.length === 0 && (
+          <p className="text-sm text-slate-400">
+            {query ? `No owners match “${query}”.` : "No owners registered yet."}
+          </p>
         )}
       </div>
 

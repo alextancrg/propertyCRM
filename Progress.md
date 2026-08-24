@@ -3,6 +3,25 @@
 > Tracked task: run the CRM feature checklist (owners, property managers, login,
 > updated-by, rename, bills). Last updated: 2026-08-25.
 
+## Follow-up round (2026-08-25) — cancellation display, bill collapse/order, owner search
+
+- **Subscription cancellation**: `SubscriptionClient` now respects `cancelAtPeriodEnd`.
+  When a subscription is cancelled in Stripe (portal) the section shows a **"Canceled"**
+  pill, tagline "… · Subscription cancelled", and — instead of "Renews {date}" — it shows
+  **"Subscription cancelled — current plan available until {periodEnd − 1 day}"**
+  (helper `availableUntil(iso)` in `SubscriptionClient`). Verified locally with a test
+  subscription (period end 2027-08-24 → "available until 23 Aug 2027"). The `cancelAtPeriodEnd`
+  flag already flowed through the webhook → `upsertSubscription` → `getSubscriptionView`.
+- **Bills & Utilities**: each property card is now **collapsable/expandable** (click the
+  header; chevron; collapsed shows "N bills — click the header to expand") — same pattern as
+  Rental Collection. Bills are now ordered **reverse-chronologically** (`orderBy: { createdAt: "desc" }`
+  in `bills/page.tsx`, was `type asc`).
+- **Owners & Landlords**: added a **"Search owners by name…"** box at the top that filters the
+  owner grid by name (client-side `query` state in `OwnersClient`); empty state shows
+  "No owners match …" when filtered.
+- Verified locally + deployed to `assethubmy.vercel.app` (propai-8xhxo6bny, aliased assethubmy +
+  propai-crm-one); tsc green. Test subscription user cleaned up.
+
 ## Feature round (2026-08-25) — Tax additions, sewerage prepayment, rental UX, manager sharing
 
 All implemented, browser-verified end-to-end locally + deployed live at

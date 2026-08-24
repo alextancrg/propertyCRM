@@ -13,7 +13,8 @@ export default async function BillsPage() {
     include: {
       bills: {
         include: { payments: { include: { receipts: true }, orderBy: { createdAt: "desc" } } },
-        orderBy: { type: "asc" },
+        // Reverse chronology — the most recently configured bill first.
+        orderBy: { createdAt: "desc" },
       },
       owners: { include: { owner: true } },
       leases: {

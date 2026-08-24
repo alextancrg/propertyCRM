@@ -75,6 +75,16 @@ export function BillsClient({ properties }: { properties: PropertyDTO[] }) {
   const [typeFilter, setTypeFilter] = useState("All");
   const [showModal, setShowModal] = useState(false);
   const [editingBill, setEditingBill] = useState<BillDTO | null>(null);
+  // Per-property expand/collapse (default expanded).
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  function toggleCollapsed(id: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
@@ -157,9 +167,17 @@ export function BillsClient({ properties }: { properties: PropertyDTO[] }) {
         {filtered.map((p) => {
           const unpaid = p.bills.reduce((s, b) => s + b.payments.filter((x) => x.status === "UNPAID").length, 0);
           const allCleared = p.bills.length > 0 && unpaid === 0;
+          const isCollapsed = collapsed.has(p.id);
           return (
             <div key={p.id} className={cx("card overflow-hidden", allCleared && "border-emerald-200")}>
-              <div className={cx("flex flex-wrap items-center justify-between gap-3 border-b px-6 py-4", allCleared ? "bg-emerald-50/40 border-emerald-100" : "bg-slate-50 border-slate-200")}>
+              <button
+                type="button"
+                onClick={() => toggleCollapsed(p.id)}
+                className={cx(
+                  "flex w-full flex-wrap items-center justify-between gap-3 border-b px-6 py-4 text-left transition hover:brightness-[0.98]",
+                  allCleared ? "bg-emerald-50/40 border-emerald-100" : "bg-slate-50 border-slate-200",
+                )}
+              >
                 <div className="flex items-center gap-3">
                   <i className={cx("fa-solid text-xl", allCleared ? "fa-city text-emerald-600" : "fa-building text-primary")} />
                   <div>
@@ -170,23 +188,35 @@ export function BillsClient({ properties }: { properties: PropertyDTO[] }) {
                     <p className="text-xs font-medium text-slate-500">Owner: {p.owners} · {p.bills.length} configured bills</p>
                   </div>
                 </div>
-                {allCleared ? (
-                  <span className="pill bg-emerald-100 text-emerald-700">
-                    <i className="fa-solid fa-shield-check" /> All Cleared
+                <div className="flex items-center gap-2">
+                  {allCleared ? (
+                    <span className="pill bg-emerald-100 text-emerald-700">
+                      <i className="fa-solid fa-shield-check" /> All Cleared
+                    </span>
+                  ) : (
+                    <span className="pill bg-orange-100 text-orange-700">{unpaid} Unpaid</span>
+                  )}
+                  <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-slate-500 shadow-sm">
+                    <i className={cx("fa-solid transition-transform", isCollapsed ? "fa-chevron-down" : "fa-chevron-up")} />
                   </span>
-                ) : (
-                  <span className="pill bg-orange-100 text-orange-700">{unpaid} Unpaid</span>
-                )}
-              </div>
+                </div>
+              </button>
 
-              <div className="divide-y divide-slate-100">
-                {p.bills.map((b) => (
-                  <BillBlock key={b.id} bill={b} onEdit={() => openEdit(b)} onSaved={router.refresh} />
-                ))}
-                {p.bills.length === 0 && (
-                  <p className="px-6 py-6 text-sm text-slate-400">No bills configured yet.</p>
-                )}
-              </div>
+              {isCollapsed ? (
+                <p className="px-6 py-4 text-xs text-slate-400">
+                  <i className="fa-regular fa-eye-slash mr-1" />
+                  {p.bills.length} bill{p.bills.length === 1 ? "" : "s"} — click the header to expand.
+                </p>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {p.bills.map((b) => (
+                    <BillBlock key={b.id} bill={b} onEdit={() => openEdit(b)} onSaved={router.refresh} />
+                  ))}
+                  {p.bills.length === 0 && (
+                    <p className="px-6 py-6 text-sm text-slate-400">No bills configured yet.</p>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
