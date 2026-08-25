@@ -155,6 +155,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <i className="fa-solid fa-right-from-bracket text-xs" />
             </button>
           </div>
+          <Link
+            href="/privacy-policy"
+            className="mt-3 flex items-center justify-center gap-1.5 text-[11px] font-medium text-blue-300 transition hover:text-white"
+          >
+            <i className="fa-solid fa-shield-halved text-[10px]" /> Privacy Policy
+          </Link>
         </div>
       </aside>
 

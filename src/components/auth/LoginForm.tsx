@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -80,6 +81,14 @@ export function LoginForm() {
 
           <p className="mt-4 text-center text-xs text-blue-200/70">
             New here? Register a property manager under the Managers section after signing in.
+          </p>
+          <p className="mt-3 text-center text-xs">
+            <Link
+              href="/privacy-policy"
+              className="text-blue-200/80 underline underline-offset-2 transition hover:text-white"
+            >
+              Privacy Policy
+            </Link>
           </p>
         </div>
       </div>

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
-import { AppShell } from "@/components/AppShell";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -10,11 +9,14 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "AssetHub — Property Management",
+  title: "GoAssetHub — Property Management",
   description:
     "AI-powered property management CRM: leases, bills, tax audit readiness, documents, and a configurable WhatsApp AI agent.",
 };
 
+// The root layout only owns the document shell. The authenticated application
+// chrome (<AppShell/>) lives in src/app/(app)/layout.tsx so that public pages
+// (e.g. /privacy-policy) render standalone without the sidebar.
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
@@ -28,9 +30,7 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
       </head>
-      <body className="font-sans">
-        <AppShell>{children}</AppShell>
-      </body>
+      <body className="font-sans">{children}</body>
     </html>
   );
 }
