@@ -17,6 +17,7 @@ export type Plan = {
   name: string;
   tagline: string;
   propertyLimit: number | null; // null = unlimited (Business / custom)
+  whatsappMessages: number; // WhatsApp AI agent messages allowed per month (0 = none)
   yearlyPriceRM: number; // 0 = free
   monthlyEquivalentRM: number;
   targetUser: string;
@@ -30,6 +31,7 @@ export const PLANS: Plan[] = [
     name: "Free",
     tagline: "Single-property owners",
     propertyLimit: 1,
+    whatsappMessages: 0,
     yearlyPriceRM: 0,
     monthlyEquivalentRM: 0,
     targetUser: "Accidental landlords",
@@ -38,6 +40,7 @@ export const PLANS: Plan[] = [
       "Bills & utility tracking",
       "Document vault",
       "Own Stay support",
+      "No WhatsApp AI messaging",
     ],
   },
   {
@@ -45,6 +48,7 @@ export const PLANS: Plan[] = [
     name: "Starter",
     tagline: "Landlord",
     propertyLimit: 3,
+    whatsappMessages: 10,
     yearlyPriceRM: 129,
     monthlyEquivalentRM: 10.75,
     targetUser: "Landlords with a small portfolio",
@@ -52,6 +56,7 @@ export const PLANS: Plan[] = [
       "Up to 3 properties",
       "Everything in Free",
       "Rental collection",
+      "WhatsApp AI agent (10 messages/mo)",
       "Email support",
     ],
   },
@@ -60,6 +65,7 @@ export const PLANS: Plan[] = [
     name: "Growth",
     tagline: "Flagship",
     propertyLimit: 10,
+    whatsappMessages: 50,
     yearlyPriceRM: 299,
     monthlyEquivalentRM: 24.9,
     targetUser: "Growing portfolios, mom-and-pop investors",
@@ -67,7 +73,7 @@ export const PLANS: Plan[] = [
       "Up to 10 properties",
       "Everything in Starter",
       "Tax & Audit reports",
-      "WhatsApp AI agent",
+      "WhatsApp AI agent (50 messages/mo)",
       "Priority support",
     ],
     highlight: true,
@@ -77,6 +83,7 @@ export const PLANS: Plan[] = [
     name: "Pro",
     tagline: "Portfolio",
     propertyLimit: 30,
+    whatsappMessages: 150,
     yearlyPriceRM: 699,
     monthlyEquivalentRM: 58.25,
     targetUser: "Small-scale property managers, serious investors",
@@ -84,6 +91,7 @@ export const PLANS: Plan[] = [
       "Up to 30 properties",
       "Everything in Growth",
       "Advanced reporting",
+      "WhatsApp AI agent (150 messages/mo)",
       "Multi-manager collaboration",
     ],
   },
@@ -92,12 +100,14 @@ export const PLANS: Plan[] = [
     name: "Business",
     tagline: "Custom",
     propertyLimit: null,
+    whatsappMessages: 300,
     yearlyPriceRM: 1299,
     monthlyEquivalentRM: 108.25,
     targetUser: "Agencies or heavy portfolio holders",
     features: [
       "Unlimited properties (50+)",
       "Everything in Pro",
+      "WhatsApp AI agent (300 messages/mo)",
       "Custom onboarding",
       "Dedicated account manager",
     ],
@@ -114,6 +124,11 @@ export function getPlan(id: string): Plan {
 /** The property limit for a plan id, or null when unlimited. */
 export function planPropertyLimit(id: string): number | null {
   return getPlan(id).propertyLimit;
+}
+
+/** The monthly WhatsApp AI message allowance for a plan id (0 = none). */
+export function planWhatsappLimit(id: string): number {
+  return getPlan(id).whatsappMessages;
 }
 
 /**

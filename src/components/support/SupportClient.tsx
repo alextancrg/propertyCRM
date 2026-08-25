@@ -6,7 +6,7 @@ import { formatDate, cx } from "@/lib/format";
 const CATEGORIES = ["Feature Request", "Bug Report", "Question", "Other"] as const;
 const MESSAGE_MAX = 4000;
 const SUBJECT_MAX = 120;
-const SUPPORT_EMAIL = "assethubmy@gmail.com";
+const SUPPORT_EMAIL = "goassethub@gmail.com";
 
 type SupportItem = {
   id: string;
@@ -91,7 +91,8 @@ export function SupportClient({
             <div>
               <p className="font-bold text-slate-900">Send us a message</p>
               <p className="text-xs text-slate-500">
-                Emailed to <span className="font-semibold text-slate-700">{SUPPORT_EMAIL}</span>.
+                Emailed to <span className="font-semibold text-slate-700">{SUPPORT_EMAIL}</span>. And expect a reply
+                from the GoAssetHub team.
               </p>
             </div>
           </div>

@@ -10,7 +10,7 @@ const SMTP_PASS = process.env.SMTP_PASS;
 
 // The inbox that receives support/feedback messages. Replies go to the sender
 // (the logged-in user's email) via the Reply-To header.
-export const SUPPORT_TO_EMAIL = process.env.SUPPORT_TO_EMAIL || "assethubmy@gmail.com";
+export const SUPPORT_TO_EMAIL = process.env.SUPPORT_TO_EMAIL || "goassethub@gmail.com";
 const SUPPORT_FROM_EMAIL =
   process.env.SUPPORT_FROM_EMAIL || SMTP_USER || "support@assethub.my";
 

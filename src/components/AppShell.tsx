@@ -8,13 +8,13 @@ import { RouteProgress } from "@/components/RouteProgress";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: "fa-chart-pie" },
-  { href: "/properties", label: "Properties & Leases", icon: "fa-house" },
+  { href: "/managers", label: "Profiles", icon: "fa-user-gear" },
   { href: "/owners", label: "Owners", icon: "fa-users" },
+  { href: "/properties", label: "Properties & Leases", icon: "fa-house" },
   { href: "/bills", label: "Bills & Utilities", icon: "fa-list-check" },
   { href: "/rentals", label: "Rental Collection", icon: "fa-hand-holding-dollar" },
   { href: "/tax", label: "Tax & Audit", icon: "fa-file-invoice-dollar" },
   { href: "/documents", label: "Documents", icon: "fa-folder-open" },
-  { href: "/managers", label: "Managers", icon: "fa-user-gear" },
   { href: "/subscription", label: "Subscription", icon: "fa-crown" },
   { href: "/ai", label: "WhatsApp AI Agent", icon: "fa-robot" },
   { href: "/support", label: "Support", icon: "fa-life-ring" },
@@ -22,13 +22,13 @@ const NAV = [
 
 const TITLES: Record<string, string> = {
   "/dashboard": "Portfolio Overview",
-  "/properties": "Properties & Leases",
+  "/managers": "Profiles",
   "/owners": "Owners & Landlords",
+  "/properties": "Properties & Leases",
   "/bills": "Bills & Utility Payments",
   "/rentals": "Rental Collection",
   "/tax": "Tax & Compliance Audit",
   "/documents": "Document Vault",
-  "/managers": "Property Managers",
   "/subscription": "Subscription & Billing",
   "/ai": "WhatsApp AI Agent",
   "/support": "Support & Feedback",

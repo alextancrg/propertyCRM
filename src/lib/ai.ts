@@ -1,5 +1,14 @@
 import { prisma } from "./prisma";
 
+// The WhatsApp AI agent is pre-configured for a DeepSeek-compatible OpenAI
+// endpoint. The model name is fixed at deployment (deepseek-v4-flash) and is
+// hidden from the UI; the API key lives in an env var (never in the DB):
+//   AI_API_KEY    — the API key you provide (falls back to OPENAI_API_KEY)
+//   AI_BASE_URL   — default https://api.deepseek.com/v1
+//   AI_MODEL      — default deepseek-v4-flash
+const DEFAULT_MODEL = process.env.AI_MODEL || "deepseek-v4-flash";
+const DEFAULT_PROVIDER = "deepseek";
+
 export type AgentConfig = {
   enabled: boolean;
   provider: string;
@@ -19,8 +28,8 @@ export async function getAgentConfig(): Promise<AgentConfig> {
   if (!cfg) {
     return {
       enabled: true,
-      provider: "mock",
-      model: "gpt-4o-mini",
+      provider: DEFAULT_PROVIDER,
+      model: DEFAULT_MODEL,
       systemPrompt:
         "You are the AI assistant for a property management office. Be polite, concise, and factual.",
       greeting: "Hi, this is the property management office. How can I help you today?",
@@ -32,10 +41,15 @@ export async function getAgentConfig(): Promise<AgentConfig> {
       tenantNames: "",
     };
   }
+  // Migration: rows created before the DeepSeek era defaulted to provider
+  // "mock" / model "gpt-4o-mini". Treat them as the new default so the agent
+  // is pre-configured for deepseek-v4-flash without a manual DB update (the
+  // model/provider are hidden in the UI and not user-editable anymore).
+  const migrated = cfg.provider === "mock";
   return {
     enabled: cfg.enabled,
-    provider: cfg.provider,
-    model: cfg.model,
+    provider: migrated ? DEFAULT_PROVIDER : cfg.provider,
+    model: migrated ? DEFAULT_MODEL : cfg.model || DEFAULT_MODEL,
     systemPrompt: cfg.systemPrompt,
     greeting: cfg.greeting,
     escalationEmail: cfg.escalationEmail,
@@ -103,20 +117,24 @@ export async function generateAgentReply(
   config: AgentConfig,
 ): Promise<{ reply: string; provider: string }> {
   const last = history[history.length - 1]?.content ?? "";
+  const apiKey = process.env.AI_API_KEY || process.env.OPENAI_API_KEY;
 
-  if (config.provider !== "openai" || !process.env.OPENAI_API_KEY) {
+  if (config.provider === "mock" || !apiKey) {
     return { reply: mockAssistantReply(last, config), provider: "mock" };
   }
 
   try {
-    const base = (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
-    const model = process.env.OPENAI_MODEL || config.model || "gpt-4o-mini";
+    const base = (process.env.AI_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.deepseek.com/v1").replace(
+      /\/$/,
+      "",
+    );
+    const model = process.env.AI_MODEL || config.model || DEFAULT_MODEL;
 
     const res = await fetch(`${base}/chat/completions`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${apiKey}`,
       },
       body: JSON.stringify({
         model,
@@ -136,7 +154,7 @@ export async function generateAgentReply(
 
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
     const reply = data.choices?.[0]?.message?.content?.trim();
-    return { reply: reply || mockAssistantReply(last, config), provider: "openai" };
+    return { reply: reply || mockAssistantReply(last, config), provider: "deepseek" };
   } catch {
     return { reply: mockAssistantReply(last, config), provider: "mock" };
   }

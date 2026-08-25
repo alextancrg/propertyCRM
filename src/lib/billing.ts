@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { getPlan, planPropertyLimit } from "./plans";
+import { getPlan, planPropertyLimit, planWhatsappLimit } from "./plans";
 import { visiblePropertyIds, type SessionUser } from "./access";
 
 export type SubscriptionView = {
@@ -46,6 +46,16 @@ export async function getUserPropertyLimit(user: SessionUser): Promise<number | 
   if (user.role === "Administrator") return null;
   const sub = await prisma.subscription.findUnique({ where: { userId: user.id } });
   return planPropertyLimit(sub?.plan ?? "free");
+}
+
+/**
+ * The monthly WhatsApp AI message allowance for a user, or null when
+ * unlimited (Administrator). Derived from the user's subscription plan.
+ */
+export async function getUserWhatsappLimit(user: SessionUser): Promise<number | null> {
+  if (user.role === "Administrator") return null;
+  const sub = await prisma.subscription.findUnique({ where: { userId: user.id } });
+  return planWhatsappLimit(sub?.plan ?? "free");
 }
 
 /** Number of active (non-deleted) properties visible to the user. */

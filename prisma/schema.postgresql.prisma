@@ -38,6 +38,8 @@ model User {
   receivedInvitations ManagerInvitation[] @relation("InvitationTo")
   sharingA            ManagerSharing[]    @relation("ManagerSharingA")
   sharingB            ManagerSharing[]    @relation("ManagerSharingB")
+  aiAuthorizedTenants AiAuthorizedTenant[]
+  whatsAppMessages    WhatsAppMessageLog[]
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @default(now()) @updatedAt
 }
@@ -108,6 +110,7 @@ model Property {
   expenses      Expense[]
   annualIncomes AnnualIncome[]
   documents     Document[]
+  whatsAppMessages WhatsAppMessageLog[]
   createdAt     DateTime        @default(now())
 }
 
@@ -174,14 +177,16 @@ model AnnualIncome {
 }
 
 model Tenant {
-  id        String     @id @default(cuid())
-  name      String
-  phone     String?
-  email     String?
-  icNumber  String?
-  leases    Lease[]
-  documents Document[]
-  createdAt DateTime   @default(now())
+  id               String             @id @default(cuid())
+  name             String
+  phone            String?
+  email            String?
+  icNumber         String?
+  leases           Lease[]
+  documents        Document[]
+  aiAuthorizedBy   AiAuthorizedTenant[]
+  whatsAppMessages WhatsAppMessageLog[]
+  createdAt        DateTime           @default(now())
 }
 
 model Lease {
@@ -321,8 +326,8 @@ model AuditLog {
 model AiAgentConfig {
   id                    String   @id @default("default")
   enabled               Boolean  @default(true)
-  provider              String   @default("mock")
-  model                 String   @default("gpt-4o-mini")
+  provider               String   @default("deepseek")
+  model                  String   @default("deepseek-v4-flash")
   systemPrompt          String
   greeting              String
   escalationEmail       String?
@@ -340,6 +345,46 @@ model ChatMessage {
   role      String   // ai | tenant
   content   String
   createdAt DateTime @default(now())
+}
+
+// A tenant explicitly authorised by a property manager for the WhatsApp AI
+// agent to contact. Eligible tenants (those with active leases on the units the
+// manager manages) are offered in the AI Agent settings as a dropdown; the
+// manager adds/removes them here. Expired-lease tenants are pruned automatically.
+model AiAuthorizedTenant {
+  id        String   @id @default(cuid())
+  userId    String
+  tenantId  String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tenantId])
+  @@index([tenantId])
+}
+
+// Every outbound WhatsApp attempt by the AI agent (or the reminder engine).
+// Used to (a) enforce the plan's monthly message quota, (b) show the manager how
+// many messages remain, and (c) power the Dashboard's "AI Agent Actions" feed —
+// the same tenant can appear multiple times with one row per attempt datetime.
+model WhatsAppMessageLog {
+  id           String    @id @default(cuid())
+  userId       String?   // manager who triggered the message (null for global/cron runs)
+  tenantId     String?   // targeted tenant (null for self/manager alerts)
+  propertyId   String?   // unit involved (scoping for dashboard visibility)
+  tenantName   String?   // snapshot of the recipient name
+  propertyName String?   // snapshot of the unit name
+  action       String    // RENT_REMINDER | CHAT_REPLY | MAINTENANCE | VIEWING | SELF_ALERT | AUTO_REMOVED
+  status       String    @default("SENT") // SENT | SKIPPED_QUOTA | TWILIO_NOT_CONFIGURED | FAILED
+  recipient    String?   // E.164 phone the message was addressed to
+  message      String?   // snapshot of the message body
+  createdAt    DateTime  @default(now())
+  user         User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  tenant       Tenant?   @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  property     Property? @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 enum PropertyStatus {

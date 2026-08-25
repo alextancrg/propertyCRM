@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { runRentReminders } from "@/lib/reminders";
+import { getSessionUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +30,12 @@ export async function GET() {
 }
 
 // POST — run the rent reminder engine now (also safe to schedule as a cron).
+// When a manager is signed in, only their authorized tenants are contacted and
+// their plan's monthly WhatsApp quota is enforced.
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const now = body.date ? new Date(body.date) : new Date();
-  const result = await runRentReminders(now);
+  const user = (await getSessionUser()) ?? undefined;
+  const result = await runRentReminders(now, user);
   return NextResponse.json({ ok: true, ...result });
 }

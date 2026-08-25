@@ -175,10 +175,10 @@ export function ManagersClient({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h3 className="text-xl font-bold text-slate-900">Property Managers</h3>
-          <p className="text-sm text-slate-500">
+          <h3 className="text-xl font-bold text-slate-900">Profiles</h3>
+          <p className="mt-1 text-sm text-slate-500">
             {isAdmin
-              ? "Register managers, update profiles, and manage shared visibility."
+              ? "Register property managers, update profiles, and manage shared visibility."
               : "You see yourself and the managers you share property visibility with."}
           </p>
         </div>

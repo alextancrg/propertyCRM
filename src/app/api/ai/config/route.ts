@@ -44,8 +44,8 @@ export async function PATCH(req: NextRequest) {
     create: {
       id: "default",
       enabled: true,
-      provider: "mock",
-      model: "gpt-4o-mini",
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
       systemPrompt: "You are the AI assistant for a property management office.",
       greeting: "Hi, this is the property management office. How can I help you today?",
       ...data,

@@ -1,7 +1,9 @@
 import { prisma } from "./prisma";
-import { BillStatus, Lease, Tenant, Property } from "@prisma/client";
+import { BillStatus, Lease, Tenant, Property, type Prisma } from "@prisma/client";
 import { logAudit } from "./ai";
 import { formatMYR } from "./format";
+import { getAuthorizedTenantIds, dispatchWhatsAppMessage } from "./whatsapp";
+import type { SessionUser } from "./access";
 
 type LeaseWithRelations = Lease & {
   tenant: Tenant;
@@ -67,22 +69,39 @@ export function buildReminderMessage(
  * it raises a self-WhatsApp escalation (red highlighted, with the unit name
  * and the tenant's phone number).
  *
+ * When a Property Manager is passed, only their authorized tenants are
+ * contacted and every message counts against the plan's monthly WhatsApp
+ * quota. When run as a cron (no user), all active leases are considered and
+ * no quota is enforced.
+ *
  * Reminders are deduplicated per lease + month + stage, so running this
  * daily is safe. Returns a summary of what was sent.
  */
-export async function runRentReminders(now = new Date()): Promise<{
-  reminders: number;
-  escalated: number;
-  skipped: number;
-}> {
+export async function runRentReminders(
+  now = new Date(),
+  user?: SessionUser,
+): Promise<{ reminders: number; escalated: number; skipped: number }> {
+  const where: Prisma.LeaseWhereInput = { status: "ACTIVE" };
+  if (user) {
+    const authorized = await getAuthorizedTenantIds(user);
+    where.tenantId = { in: authorized };
+  }
+
   const leases = await prisma.lease.findMany({
-    where: { status: "ACTIVE" },
+    where,
     include: {
       tenant: true,
       property: true,
       rentPayments: { select: { month: true, status: true } },
     },
   });
+
+  // For quota-free cron/system runs use an Administrator actor (unlimited).
+  const actor: SessionUser =
+    user ?? { id: "system", name: "System", email: "system@goassethub.com", role: "Administrator" };
+  const managerPhone = user
+    ? (await prisma.user.findUnique({ where: { id: user.id }, select: { phone: true } }))?.phone ?? null
+    : null;
 
   const key = monthKey(now);
   const today = startOfDay(now);
@@ -151,24 +170,45 @@ export async function runRentReminders(now = new Date()): Promise<{
       },
     });
 
-    // NOTE: Real WhatsApp delivery would call the Meta Graph API here using
-    // the tenant's phone number (or the manager's number for self alerts).
-    // In this demo the reminder is persisted + logged so it can be reviewed
-    // in the WhatsApp AI Agent section.
     if (isEscalation) {
+      // Self-WhatsApp alert to the property manager (quota-checked + logged).
+      await dispatchWhatsAppMessage({
+        user: actor,
+        propertyId: lease.propertyId,
+        tenantId: lease.tenantId,
+        tenantName: lease.tenant.name,
+        propertyName: lease.property.name,
+        phone: managerPhone,
+        action: "SELF_ALERT",
+        body: message,
+        now,
+      });
       await logAudit(
         "RentReminder",
         "ESCALATED",
         `Rent overdue — self WhatsApp alert: ${lease.property.name}, tenant ${lease.tenant.name} (${lease.tenant.phone ?? "n/a"}).`,
         lease.propertyId,
+        user?.id,
       );
       escalated++;
     } else {
+      const result = await dispatchWhatsAppMessage({
+        user: actor,
+        propertyId: lease.propertyId,
+        tenantId: lease.tenantId,
+        tenantName: lease.tenant.name,
+        propertyName: lease.property.name,
+        phone: lease.tenant.phone,
+        action: "RENT_REMINDER",
+        body: message,
+        now,
+      });
       await logAudit(
         "RentReminder",
         "SENT",
-        `${stage} reminder sent for ${lease.property.name} — ${lease.tenant.name} (${lease.tenant.phone ?? "no phone"}).`,
+        `${stage} reminder for ${lease.property.name} — ${lease.tenant.name} (${lease.tenant.phone ?? "no phone"})${result.reason ? ` · ${result.reason}` : ""}.`,
         lease.propertyId,
+        user?.id,
       );
       reminders++;
     }

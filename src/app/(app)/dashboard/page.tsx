@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { BillStatus, PropertyStatus } from "@prisma/client";
-import { formatMYR, formatDate, initials } from "@/lib/format";
+import { formatMYR, formatDate, initials, cx } from "@/lib/format";
 import { requireUser } from "@/lib/auth";
 import { visiblePropertyIds } from "@/lib/access";
+import { getWhatsappUsage } from "@/lib/whatsapp";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,27 @@ const ACTIVITY_ICON: Record<string, { icon: string; cls: string }> = {
   UPLOADED: { icon: "fa-file-arrow-up", cls: "bg-slate-100 text-slate-600" },
   AI_REPLY: { icon: "fa-robot", cls: "bg-emerald-100 text-emerald-600" },
 };
+
+const WA_ACTION_META: Record<string, { icon: string; cls: string; label: string }> = {
+  RENT_REMINDER: { icon: "fa-bell", cls: "bg-blue-100 text-blue-600", label: "Rent reminder" },
+  SELF_ALERT: { icon: "fa-triangle-exclamation", cls: "bg-red-100 text-red-600", label: "Self escalation" },
+  CHAT_REPLY: { icon: "fa-comment-dots", cls: "bg-emerald-100 text-emerald-600", label: "Chat reply" },
+  MAINTENANCE: { icon: "fa-wrench", cls: "bg-orange-100 text-orange-600", label: "Maintenance" },
+  VIEWING: { icon: "fa-calendar-check", cls: "bg-purple-100 text-purple-600", label: "Viewing" },
+  AUTO_REMOVED: { icon: "fa-user-minus", cls: "bg-slate-100 text-slate-600", label: "Auto-removed (lease expired)" },
+};
+
+const WA_STATUS_META: Record<string, { label: string; cls: string }> = {
+  SENT: { label: "Sent", cls: "bg-emerald-100 text-emerald-700" },
+  SKIPPED_QUOTA: { label: "Quota reached", cls: "bg-red-100 text-red-700" },
+  TWILIO_NOT_CONFIGURED: { label: "Twilio not configured", cls: "bg-amber-100 text-amber-700" },
+  FAILED: { label: "Failed", cls: "bg-red-100 text-red-700" },
+  INFO: { label: "Info", cls: "bg-slate-100 text-slate-600" },
+};
+
+function waTimestamp(d: Date): string {
+  return d.toLocaleString("en-MY", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
 
 export default async function DashboardPage() {
   const me = await requireUser();
@@ -56,6 +78,30 @@ export default async function DashboardPage() {
 
   const arrears = unpaidRent._sum.amount ?? 0;
   const collected = paidRent._sum.amount ?? 0;
+
+  // WhatsApp AI agent — action feed + monthly message budget.
+  const [whatsappLogs, waUsage] = await Promise.all([
+    prisma.whatsAppMessageLog.findMany({
+      where: propIds ? { propertyId: { in: propIds } } : {},
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    }),
+    getWhatsappUsage(me),
+  ]);
+
+  // Group attempts by tenant + action so repeated actions show every datetime.
+  const waGroups = new Map<
+    string,
+    { subject: string; action: string; status: string; at: string[] }
+  >();
+  for (const log of whatsappLogs) {
+    const subject = log.tenantName ?? log.propertyName ?? "System";
+    const key = `${subject}::${log.action}`;
+    const existing = waGroups.get(key);
+    if (existing) existing.at.push(waTimestamp(log.createdAt));
+    else waGroups.set(key, { subject, action: log.action, status: log.status, at: [waTimestamp(log.createdAt)] });
+  }
+  const groupedWaLogs = Array.from(waGroups.values());
 
   const kpis = [
     { label: "Total Properties", value: String(properties), icon: "fa-building", cls: "bg-blue-50 text-blue-600" },
@@ -150,6 +196,77 @@ export default async function DashboardPage() {
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* WhatsApp AI agent actions */}
+      <div className="card">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-6">
+          <div>
+            <h3 className="text-lg font-semibold text-slate-800">
+              <i className="fa-solid fa-robot mr-2 text-primary" />
+              AI Agent Actions (WhatsApp)
+            </h3>
+            <p className="text-sm text-slate-500">
+              What the WhatsApp AI agent tried on your tenants, and when — repeated actions show every execution time.
+            </p>
+          </div>
+          <span
+            className={cx(
+              "pill px-3 py-1 text-xs",
+              waUsage.limit === null
+                ? "bg-emerald-100 text-emerald-700"
+                : (waUsage.left ?? 0) === 0
+                  ? "bg-red-100 text-red-700"
+                  : "bg-sky-100 text-sky-700",
+            )}
+          >
+            <i className="fa-solid fa-message mr-1" />
+            {waUsage.limit === null
+              ? `WhatsApp messages sent this month: ${waUsage.used} (unlimited)`
+              : `WhatsApp messages left: ${waUsage.left} of ${waUsage.limit}`}
+          </span>
+        </div>
+
+        <div className="px-6 pb-6 pt-4">
+          {groupedWaLogs.length === 0 ? (
+            <p className="py-6 text-center text-sm text-slate-400">
+              No AI agent actions yet. Configure your authorized tenants under WhatsApp AI Agent and run the reminder engine.
+            </p>
+          ) : (
+            <ul className="space-y-3">
+              {groupedWaLogs.map((g) => {
+                const meta = WA_ACTION_META[g.action] ?? { icon: "fa-clock", cls: "bg-slate-100 text-slate-500", label: g.action.replace(/_/g, " ") };
+                const status = WA_STATUS_META[g.status] ?? { label: g.status, cls: "bg-slate-100 text-slate-600" };
+                return (
+                  <li key={`${g.subject}::${g.action}`} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-3">
+                        <div className={`grid h-10 w-10 place-items-center rounded-full ${meta.cls}`}>
+                          <i className={`fa-solid ${meta.icon}`} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">{g.subject}</p>
+                          <p className="text-xs text-slate-500">{meta.label}</p>
+                        </div>
+                      </div>
+                      <span className={`pill ${status.cls}`}>{status.label}</span>
+                    </div>
+                    {g.at.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {g.at.map((t, i) => (
+                          <span key={i} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600">
+                            <i className="fa-regular fa-clock text-slate-400" />
+                            {t}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       </div>
     </div>

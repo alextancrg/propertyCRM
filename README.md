@@ -125,16 +125,23 @@ the document record + audit trail already stores the resulting URL.
 | Variable | Required | Purpose |
 |----------|----------|---------|
 | `DATABASE_URL` | ✅ | Prisma connection string (`file:./dev.db` locally, Postgres URL in prod). |
-| `OPENAI_API_KEY` | ⬜ | Enables the real LLM provider for the AI agent. |
-| `OPENAI_BASE_URL` / `OPENAI_MODEL` | ⬜ | Custom OpenAI-compatible endpoint / model. |
-| `WHATSAPP_VERIFY_TOKEN` | ⬜ | Meta webhook verification token. |
-| `WHATSAPP_ACCESS_TOKEN` / `WHATSAPP_PHONE_NUMBER_ID` | ⬜ | Meta Graph API credentials for sending replies. |
+| `AI_API_KEY` | ⬜ | The API key you provide for the WhatsApp AI agent (DeepSeek-compatible). |
+| `AI_BASE_URL` / `AI_MODEL` | ⬜ | Custom OpenAI-compatible endpoint / model (defaults: `https://api.deepseek.com/v1` / `deepseek-v4-flash`). |
+| `TWILIO_ACCOUNT_SID` / `TWILIO_AUTH_TOKEN` | ⬜ | Twilio credentials required for real WhatsApp message delivery. |
+| `TWILIO_WHATSAPP_FROM` | ⬜ | Your Twilio WhatsApp sender number (e.g. `whatsapp:+14155238886`). |
+| `WHATSAPP_VERIFY_TOKEN` | ⬜ | Legacy Meta webhook verification token (kept for backward compatibility). |
 | `STRIPE_SECRET_KEY` | ⬜ | Enables live Stripe Checkout + Billing Portal on `/subscription`. |
 | `STRIPE_WEBHOOK_SECRET` | ⬜ | Signing secret for the `/api/billing/webhook` endpoint. |
 | `STRIPE_PRICE_STARTER` / `STRIPE_PRICE_GROWTH` / `STRIPE_PRICE_PRO` / `STRIPE_PRICE_BUSINESS` | ⬜ | Yearly-recurring Stripe Price IDs for each paid plan. |
 | `NEXT_PUBLIC_APP_URL` | ⬜ | Public origin for Stripe success/cancel URLs (set on Vercel). |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` / `SMTP_PASS` | ⬜ | SMTP server used by the Support page to email feedback. |
-| `SUPPORT_TO_EMAIL` / `SUPPORT_FROM_EMAIL` | ⬜ | Support inbox (default `assethubmy@gmail.com`) and from-address. |
+| `SUPPORT_TO_EMAIL` / `SUPPORT_FROM_EMAIL` | ⬜ | Support inbox (default `goassethub@gmail.com`) and from-address. |
+
+> **WhatsApp via Twilio:** outbound messages (rent reminders, escalations, AI chat
+> replies) are sent through the Twilio Messages API. Without Twilio credentials the
+> agent still records every attempt in the Dashboard feed but no message is
+> delivered. Point your Twilio WhatsApp sender's **"When a message comes in"**
+> webhook to `POST /api/whatsapp/webhook` for inbound conversations.
 
 > **Subscriptions without Stripe keys:** in development (non-production) the
 > Subscription page simulates plan changes locally so the flow can be tested

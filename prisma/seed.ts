@@ -38,13 +38,13 @@ async function main() {
 
   // ── Owners ───────────────────────────────────────────────────────────────
   const fazil = await prisma.owner.create({
-    data: { name: "Dato' Fazil", icNumber: "820101-14-XXXX", phone: "012-555-0101", email: "fazil@example.my" },
+    data: { name: "Dato' Fazil", icNumber: "820101-14-XXXX", phone: "012-555-0101", email: "fazil@example.my", createdById: manager.id },
   });
   const lim = await prisma.owner.create({
-    data: { name: "Lim Wei Chong", icNumber: "750412-10-XXXX", phone: "019-222-7711", email: "lim@example.my" },
+    data: { name: "Lim Wei Chong", icNumber: "750412-10-XXXX", phone: "019-222-7711", email: "lim@example.my", createdById: manager.id },
   });
   const zaki = await prisma.owner.create({
-    data: { name: "Ahmad Zaki", icNumber: "790805-01-XXXX", phone: "013-444-1122" },
+    data: { name: "Ahmad Zaki", icNumber: "790805-01-XXXX", phone: "013-444-1122", createdById: manager.id },
   });
 
   // ── Tenants ──────────────────────────────────────────────────────────────
