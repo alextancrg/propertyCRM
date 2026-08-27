@@ -233,6 +233,14 @@ export async function runRentReminders(
         phone: lease.tenant.phone,
         action: "RENT_REMINDER",
         body: message,
+        // Approved-template variables (used when TWILIO_WHATSAPP_CONTENT_SID is set):
+        // 1 = name, 2 = amount, 3 = unit, 4 = due date.
+        contentVariables: {
+          "1": lease.tenant.name,
+          "2": formatMYR(lease.monthlyRent),
+          "3": lease.property.name,
+          "4": dueDate.toLocaleDateString("en-MY", { day: "2-digit", month: "short", year: "numeric" }),
+        },
         now,
       });
       await logAudit(

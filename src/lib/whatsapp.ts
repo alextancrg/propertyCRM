@@ -15,6 +15,12 @@ import { visiblePropertyIds, type SessionUser } from "./access";
 const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_FROM = process.env.TWILIO_WHATSAPP_FROM || "whatsapp:+14155238886";
+// Optional approved WhatsApp Content Template SID (e.g. "HX..."). When set,
+// outbound messages are sent with ContentSid + ContentVariables instead of a
+// free-form Body — required by WhatsApp for proactive messages sent outside
+// the 24-hour session window. Template placeholders used by this app:
+//   {{1}} = tenant name · {{2}} = rent amount · {{3}} = unit · {{4}} = due date
+const TWILIO_CONTENT_SID = process.env.TWILIO_WHATSAPP_CONTENT_SID || null;
 
 /** Whether Twilio WhatsApp credentials are configured. */
 export function twilioConfigured(): boolean {
@@ -91,9 +97,20 @@ export async function getWhatsappUsage(user: SessionUser, now = new Date()): Pro
 export async function sendWhatsAppMessage(opts: {
   to: string; // E.164 phone, e.g. "+60123456789"
   body: string;
+  contentSid?: string | null;
+  contentVariables?: Record<string, string> | null;
 }): Promise<{ ok: boolean; sid?: string; reason?: string }> {
   if (!twilioConfigured()) return { ok: false, reason: "twilio-not-configured" };
   try {
+    const params = new URLSearchParams({ From: TWILIO_FROM, To: `whatsapp:${opts.to}` });
+    const contentSid = opts.contentSid ?? TWILIO_CONTENT_SID;
+    if (contentSid && opts.contentVariables) {
+      // WhatsApp Content API — send via the approved template.
+      params.set("ContentSid", contentSid);
+      params.set("ContentVariables", JSON.stringify(opts.contentVariables));
+    } else {
+      params.set("Body", opts.body);
+    }
     const res = await fetch(
       `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`,
       {
@@ -102,7 +119,7 @@ export async function sendWhatsAppMessage(opts: {
           "Content-Type": "application/x-www-form-urlencoded",
           Authorization: `Basic ${Buffer.from(`${TWILIO_SID}:${TWILIO_TOKEN}`).toString("base64")}`,
         },
-        body: new URLSearchParams({ From: TWILIO_FROM, To: `whatsapp:${opts.to}`, Body: opts.body }),
+        body: params,
       },
     );
     const data = (await res.json().catch(() => ({}))) as { sid?: string; message?: string };
@@ -122,6 +139,8 @@ export type DispatchInput = {
   phone?: string | null;
   action: string;
   body: string;
+  /** When set (and TWILIO_WHATSAPP_CONTENT_SID is configured), sends via the approved template. */
+  contentVariables?: Record<string, string> | null;
   now?: Date;
 };
 
@@ -161,7 +180,11 @@ export async function dispatchWhatsAppMessage(
     return { status: "SKIPPED_QUOTA", reason: "quota-exhausted" };
   }
 
-  const res = await sendWhatsAppMessage({ to: input.phone, body: input.body });
+  const res = await sendWhatsAppMessage({
+    to: input.phone,
+    body: input.body,
+    contentVariables: input.contentVariables ?? null,
+  });
   const status: MessageStatus = res.ok ? "SENT" : res.reason === "twilio-not-configured" ? "TWILIO_NOT_CONFIGURED" : "FAILED";
   // Persist the real Twilio error so the dashboard can show WHY a send failed
   // (auth 401, invalid sender, session/template, quota, etc.) instead of a
