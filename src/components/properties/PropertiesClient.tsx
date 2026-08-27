@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cx, formatMYR, formatDate, initials } from "@/lib/format";
 import { PROPERTY_TYPES, PROPERTY_MAX_REMARKS } from "@/lib/properties";
+import { normalizePhoneE164 } from "@/lib/phone";
 
 type PropertyDTO = {
   id: string;
@@ -735,7 +736,13 @@ function PropertyFormModal({
               </div>
               <div>
                 <label className="label mb-1">Tenant phone</label>
-                <input value={tenantPhone} onChange={(e) => setTenantPhone(e.target.value)} className="input" placeholder="01x-xxx-xxxx" />
+                <input
+                  value={tenantPhone}
+                  onChange={(e) => setTenantPhone(e.target.value)}
+                  onBlur={() => setTenantPhone((v) => normalizePhoneE164(v) ?? v)}
+                  className="input"
+                  placeholder="01x-xxx-xxxx (auto-converted to +60…)"
+                />
               </div>
               <div>
                 <label className="label mb-1">Monthly rent (RM)</label>

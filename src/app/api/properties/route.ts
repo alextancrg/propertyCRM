@@ -6,6 +6,7 @@ import { LeaseStatus, PropertyStatus } from "@prisma/client";
 import { validateOwners, resolveOwnerInput, type OwnerInput } from "@/lib/owners";
 import { PROPERTY_MAX_REMARKS } from "@/lib/properties";
 import { assertCanAddProperty } from "@/lib/billing";
+import { normalizePhoneE164 } from "@/lib/phone";
 
 export const dynamic = "force-dynamic";
 
@@ -78,7 +79,7 @@ export async function POST(req: NextRequest) {
   // Optional tenant + lease.
   if (body.tenantName) {
     const tenant = await prisma.tenant.create({
-      data: { name: body.tenantName, phone: body.tenantPhone ?? null },
+      data: { name: body.tenantName, phone: normalizePhoneE164(body.tenantPhone) },
     });
     await prisma.lease.create({
       data: {

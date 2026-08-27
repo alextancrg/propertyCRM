@@ -6,6 +6,7 @@ import { BillStatus, LeaseStatus, PropertyStatus } from "@prisma/client";
 import { generateBillCycles } from "@/lib/bills";
 import { resolveOwnerInput, validateOwners, type OwnerInput } from "@/lib/owners";
 import { PROPERTY_MAX_REMARKS } from "@/lib/properties";
+import { normalizePhoneE164 } from "@/lib/phone";
 
 export const dynamic = "force-dynamic";
 
@@ -164,12 +165,12 @@ export async function PATCH(
         where: { id: activeLease.tenantId },
         data: {
           name: body.tenantName ?? undefined,
-          phone: body.tenantPhone !== undefined ? body.tenantPhone || null : undefined,
+          phone: body.tenantPhone !== undefined ? normalizePhoneE164(body.tenantPhone) : undefined,
         },
       });
     } else {
       const tenant = await prisma.tenant.create({
-        data: { name: body.tenantName, phone: body.tenantPhone ?? null },
+        data: { name: body.tenantName, phone: normalizePhoneE164(body.tenantPhone) },
       });
       await prisma.lease.create({
         data: {
