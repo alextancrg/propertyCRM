@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAgentConfig, generateAgentReply, type ChatTurn, logAudit } from "@/lib/ai";
-import { dispatchWhatsAppMessage } from "@/lib/whatsapp";
+import { dispatchWhatsAppMessage, validateTwilioRequest } from "@/lib/whatsapp";
 import type { SessionUser } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
@@ -70,6 +70,26 @@ export async function POST(req: NextRequest) {
   if (contentType.includes("application/x-www-form-urlencoded")) {
     const text = await req.text();
     const form = new URLSearchParams(text);
+
+    // Twilio signature validation — only enforced when the auth token is
+    // configured, so the endpoint still works in local/dev without Twilio creds.
+    const authToken = process.env.TWILIO_AUTH_TOKEN;
+    if (authToken) {
+      const signature = req.headers.get("x-twilio-signature") ?? "";
+      const proto = req.headers.get("x-forwarded-proto") ?? "https";
+      const host = req.headers.get("host") ?? "";
+      // Full public URL exactly as configured in Twilio (no query string here).
+      const fullUrl = `${proto}://${host}${req.nextUrl.pathname}`;
+      const params: Record<string, string> = {};
+      for (const [k, v] of form.entries()) params[k] = v;
+      if (!validateTwilioRequest(authToken, signature, fullUrl, params)) {
+        return NextResponse.json(
+          { error: "invalid twilio signature" },
+          { status: 403 },
+        );
+      }
+    }
+
     inbound = form.get("Body") ?? "";
     from = form.get("From") ?? ""; // e.g. "whatsapp:+60123456789"
   } else {

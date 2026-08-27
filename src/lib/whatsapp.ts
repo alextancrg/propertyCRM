@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { prisma } from "./prisma";
 import { getUserWhatsappLimit } from "./billing";
 import { visiblePropertyIds, type SessionUser } from "./access";
@@ -37,6 +38,29 @@ const CONTENT_SIDS_ESCALATION: Record<string, string | null> = {
 /** Normalize a language tag for template lookup (falls back to English). */
 function templateLanguage(lang: string | null | undefined): "en" | "ms" | "zh-CN" {
   return lang === "ms" || lang === "zh-CN" ? lang : "en";
+}
+
+/**
+ * Validate an incoming Twilio webhook signature (the X-Twilio-Signature header)
+ * using the same canonical-string construction as Twilio's official
+ * request validator: HMAC-SHA1 over
+ *   `{full URL}{POST params sorted by key, each concatenated as key+value with no delimiters}`
+ * where the param values are the URL-decoded form values (matches Twilio's
+ * signing of WhatsApp/voice webhooks, including non-ASCII message bodies).
+ * Returns false when the signature header is missing or does not match.
+ */
+export function validateTwilioRequest(
+  authToken: string,
+  signature: string,
+  url: string,
+  params: Record<string, string>,
+): boolean {
+  if (!signature) return false;
+  const data = Object.keys(params)
+    .sort()
+    .reduce((acc, key) => acc + key + params[key], url);
+  const expected = crypto.createHmac("sha1", authToken).update(data).digest("base64");
+  return expected === signature;
 }
 
 /** Whether Twilio WhatsApp credentials are configured. */
