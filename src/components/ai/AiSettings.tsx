@@ -94,6 +94,12 @@ export function AiSettings({
   const [runResult, setRunResult] = useState<string | null>(null);
   // Optional simulated "today" for testing alert timing without waiting.
   const [testDate, setTestDate] = useState("");
+  // Temporary test-send control (verify Twilio outbound delivery).
+  const [testTenantId, setTestTenantId] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [testOk, setTestOk] = useState(false);
 
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
@@ -127,6 +133,38 @@ export function AiSettings({
       }
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function sendTestWhatsApp() {
+    if (!testTenantId || testing) return;
+    setTesting(true);
+    setTestError(null);
+    setTestResult(null);
+    try {
+      const res = await fetch("/api/whatsapp/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tenantId: testTenantId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setTestOk(false);
+        setTestError(data?.error ?? t("common.somethingWentWrong"));
+        return;
+      }
+      const statusKey =
+        data.status === "SENT"
+          ? "sent"
+          : data.status === "TWILIO_NOT_CONFIGURED"
+            ? "twilioNotConfigured"
+            : "failed";
+      const statusLabel = t(`dashboard.waStatus.${statusKey}`);
+      const reason = typeof data.reason === "string" && data.reason ? ` — ${data.reason}` : "";
+      setTestOk(data.status === "SENT");
+      setTestResult(`${t("ai.testWhatsAppResult", { tenant: data.tenantName ?? "" })} ${statusLabel}${reason}`);
+    } finally {
+      setTesting(false);
     }
   }
 
@@ -166,6 +204,7 @@ export function AiSettings({
 
   // --- Authorized tenant list management (per manager) ---
   const candidates = eligible.filter((t) => !authorized.includes(t.id));
+  const authorizedTenants = eligible.filter((t) => authorized.includes(t.id));
 
   async function applyAuthorized(nextIds: string[]) {
     setSavingTenants(true);
@@ -631,6 +670,45 @@ export function AiSettings({
             <i className="fa-solid fa-circle-check mr-1" /> {runResult}
           </p>
         )}
+
+        {/* Temporary: verify Twilio outbound delivery with a manual test send */}
+        <div className="mx-6 mb-4 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-4">
+          <p className="label mb-1">{t("ai.testWhatsAppTitle")}</p>
+          <p className="mb-3 text-xs text-slate-500">{t("ai.testWhatsAppHint")}</p>
+          <div className="flex flex-wrap items-center gap-3">
+            <select
+              value={testTenantId}
+              onChange={(e) => setTestTenantId(e.target.value)}
+              className="input cursor-pointer sm:w-72"
+            >
+              <option value="">{t("ai.selectTenant")}</option>
+              {authorizedTenants.map((tenant) => (
+                <option key={tenant.id} value={tenant.id}>
+                  {tenant.name}
+                  {tenant.unit ? ` — ${tenant.unit}` : ""}
+                </option>
+              ))}
+            </select>
+            <button type="button" onClick={sendTestWhatsApp} disabled={!testTenantId || testing} className="btn-primary">
+              {testing ? (
+                <><i className="fa-solid fa-spinner fa-spin" /> {t("ai.sending")}</>
+              ) : (
+                <><i className="fa-brands fa-whatsapp" /> {t("ai.sendTestWhatsApp")}</>
+              )}
+            </button>
+          </div>
+          {testError && (
+            <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-semibold text-red-600">
+              <i className="fa-solid fa-triangle-exclamation mr-1" /> {testError}
+            </p>
+          )}
+          {testResult && (
+            <p className={cx("mt-3 rounded-lg px-3 py-2 text-xs font-semibold", testOk ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700")}>
+              <i className={cx("fa-solid mr-1", testOk ? "fa-circle-check" : "fa-triangle-exclamation")} />
+              {testResult}
+            </p>
+          )}
+        </div>
 
         <div className="px-6 pb-6">
           {reminders.length === 0 ? (
