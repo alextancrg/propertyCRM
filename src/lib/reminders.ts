@@ -213,6 +213,15 @@ export async function runRentReminders(
         phone: managerPhone,
         action: "SELF_ALERT",
         body: message,
+        // Escalation-template variables (used when the escalation SID is set):
+        // 1 = unit, 2 = tenant name, 3 = tenant phone, 4 = amount, 5 = due date.
+        contentVariables: {
+          "1": lease.property.name,
+          "2": lease.tenant.name,
+          "3": lease.tenant.phone ?? "no phone",
+          "4": formatMYR(lease.monthlyRent),
+          "5": dueDate.toLocaleDateString("en-MY", { day: "2-digit", month: "short", year: "numeric" }),
+        },
         now,
       });
       await logAudit(

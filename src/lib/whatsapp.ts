@@ -15,12 +15,16 @@ import { visiblePropertyIds, type SessionUser } from "./access";
 const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_FROM = process.env.TWILIO_WHATSAPP_FROM || "whatsapp:+14155238886";
-// Optional approved WhatsApp Content Template SID (e.g. "HX..."). When set,
-// outbound messages are sent with ContentSid + ContentVariables instead of a
-// free-form Body — required by WhatsApp for proactive messages sent outside
-// the 24-hour session window. Template placeholders used by this app:
-//   {{1}} = tenant name · {{2}} = rent amount · {{3}} = unit · {{4}} = due date
+// Optional approved WhatsApp Content Template SIDs. When set, outbound messages
+// are sent with ContentSid + ContentVariables instead of a free-form Body —
+// required by WhatsApp for proactive messages sent outside the 24-hour session
+// window. Placeholders used by the app:
+//   Rent reminder / test (TWILIO_WHATSAPP_CONTENT_SID):
+//     {{1}} = tenant name · {{2}} = rent amount · {{3}} = unit · {{4}} = due date
+//   Self-escalation alert (TWILIO_WHATSAPP_CONTENT_SID_ESCALATION):
+//     {{1}} = unit · {{2}} = tenant name · {{3}} = tenant phone · {{4}} = amount · {{5}} = due date
 const TWILIO_CONTENT_SID = process.env.TWILIO_WHATSAPP_CONTENT_SID || null;
+const TWILIO_CONTENT_SID_ESCALATION = process.env.TWILIO_WHATSAPP_CONTENT_SID_ESCALATION || null;
 
 /** Whether Twilio WhatsApp credentials are configured. */
 export function twilioConfigured(): boolean {
@@ -103,7 +107,7 @@ export async function sendWhatsAppMessage(opts: {
   if (!twilioConfigured()) return { ok: false, reason: "twilio-not-configured" };
   try {
     const params = new URLSearchParams({ From: TWILIO_FROM, To: `whatsapp:${opts.to}` });
-    const contentSid = opts.contentSid ?? TWILIO_CONTENT_SID;
+    const contentSid = opts.contentSid ?? null;
     if (contentSid && opts.contentVariables) {
       // WhatsApp Content API — send via the approved template.
       params.set("ContentSid", contentSid);
@@ -139,8 +143,10 @@ export type DispatchInput = {
   phone?: string | null;
   action: string;
   body: string;
-  /** When set (and TWILIO_WHATSAPP_CONTENT_SID is configured), sends via the approved template. */
+  /** When set (and a matching TWILIO_WHATSAPP_CONTENT_SID* is configured), sends via the approved template. */
   contentVariables?: Record<string, string> | null;
+  /** Optional explicit template SID (defaults: RENT_REMINDER/test → main SID; SELF_ALERT → escalation SID). */
+  contentSid?: string | null;
   now?: Date;
 };
 
@@ -180,9 +186,12 @@ export async function dispatchWhatsAppMessage(
     return { status: "SKIPPED_QUOTA", reason: "quota-exhausted" };
   }
 
+  const contentSid =
+    input.contentSid ?? (input.action === "SELF_ALERT" ? TWILIO_CONTENT_SID_ESCALATION : TWILIO_CONTENT_SID);
   const res = await sendWhatsAppMessage({
     to: input.phone,
     body: input.body,
+    contentSid,
     contentVariables: input.contentVariables ?? null,
   });
   const status: MessageStatus = res.ok ? "SENT" : res.reason === "twilio-not-configured" ? "TWILIO_NOT_CONFIGURED" : "FAILED";
