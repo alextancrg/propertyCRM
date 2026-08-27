@@ -16,6 +16,9 @@ type Config = {
   autoMaintenanceTriage: boolean;
   autoViewingSchedule: boolean;
   tenantNames: string;
+  reminderDays1: number;
+  reminderDays2: number;
+  reminderDays3: number;
 };
 
 type Msg = { id: string; role: "ai" | "tenant"; content: string };
@@ -88,6 +91,8 @@ export function AiSettings({
   const [reminders, setReminders] = useState<Reminder[]>(initialReminders);
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState<string | null>(null);
+  // Optional simulated "today" for testing alert timing without waiting.
+  const [testDate, setTestDate] = useState("");
 
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
@@ -97,7 +102,11 @@ export function AiSettings({
     setRunning(true);
     setRunResult(null);
     try {
-      const res = await fetch("/api/whatsapp/reminders", { method: "POST" });
+      const res = await fetch("/api/whatsapp/reminders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(testDate ? { date: testDate } : {}),
+      });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
         setRunResult(
@@ -371,6 +380,47 @@ export function AiSettings({
             </div>
           </div>
 
+          {/* Rent alert timing — days relative to the property's rent due date */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+            <p className="label mb-1">{t("ai.reminderTiming")}</p>
+            <p className="mb-3 text-xs text-slate-500">{t("ai.reminderTimingHint")}</p>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="label mb-1">{t("ai.alert1")}</label>
+                <input
+                  type="number"
+                  value={config.reminderDays1}
+                  onChange={(e) => setConfig({ ...config, reminderDays1: parseInt(e.target.value || "0", 10) })}
+                  className="input"
+                  min={-31}
+                  max={31}
+                />
+              </div>
+              <div>
+                <label className="label mb-1">{t("ai.alert2")}</label>
+                <input
+                  type="number"
+                  value={config.reminderDays2}
+                  onChange={(e) => setConfig({ ...config, reminderDays2: parseInt(e.target.value || "0", 10) })}
+                  className="input"
+                  min={-31}
+                  max={31}
+                />
+              </div>
+              <div>
+                <label className="label mb-1">{t("ai.alert3")}</label>
+                <input
+                  type="number"
+                  value={config.reminderDays3}
+                  onChange={(e) => setConfig({ ...config, reminderDays3: parseInt(e.target.value || "0", 10) })}
+                  className="input"
+                  min={-31}
+                  max={31}
+                />
+              </div>
+            </div>
+          </div>
+
           <button type="submit" disabled={saving} className="btn-primary w-full justify-center">
             {saving ? <><i className="fa-solid fa-spinner fa-spin" /> {t("ai.saving")}</> : t("ai.saveConfig")}
           </button>
@@ -532,9 +582,30 @@ export function AiSettings({
             </h4>
             <p className="max-w-3xl text-sm text-slate-500">{t("ai.reminderEngineDesc")}</p>
           </div>
-          <button onClick={runReminders} disabled={running} className="btn-primary">
-            <i className="fa-solid fa-play" /> {running ? t("ai.running") : t("ai.runReminders")}
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-2" title={t("ai.testDateHint")}>
+              <span className="text-xs font-semibold text-slate-500">{t("ai.testDate")}</span>
+              <input
+                type="date"
+                value={testDate}
+                onChange={(e) => setTestDate(e.target.value)}
+                className="input w-auto py-1.5 text-xs"
+              />
+              {testDate && (
+                <button
+                  type="button"
+                  onClick={() => setTestDate("")}
+                  className="grid h-7 w-7 place-items-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                  title={t("common.cancel")}
+                >
+                  <i className="fa-solid fa-xmark text-xs" />
+                </button>
+              )}
+            </label>
+            <button onClick={runReminders} disabled={running} className="btn-primary">
+              <i className="fa-solid fa-play" /> {running ? t("ai.running") : t("ai.runReminders")}
+            </button>
+          </div>
         </div>
 
         {runResult && (

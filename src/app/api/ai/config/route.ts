@@ -21,7 +21,17 @@ type UpdateData = Partial<{
   autoMaintenanceTriage: boolean;
   autoViewingSchedule: boolean;
   tenantNames: string;
+  reminderDays1: number;
+  reminderDays2: number;
+  reminderDays3: number;
 }>;
+
+// Clamp the per-alert day offsets to ±31 (within a calendar month).
+function clampReminderDay(v: unknown): number | undefined {
+  const n = Number(v);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return undefined;
+  return Math.max(-31, Math.min(31, n));
+}
 
 export async function PATCH(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
@@ -38,6 +48,12 @@ export async function PATCH(req: NextRequest) {
   if (typeof body.autoMaintenanceTriage === "boolean") data.autoMaintenanceTriage = body.autoMaintenanceTriage;
   if (typeof body.autoViewingSchedule === "boolean") data.autoViewingSchedule = body.autoViewingSchedule;
   if (typeof body.tenantNames === "string") data.tenantNames = body.tenantNames;
+  const d1 = clampReminderDay(body.reminderDays1);
+  const d2 = clampReminderDay(body.reminderDays2);
+  const d3 = clampReminderDay(body.reminderDays3);
+  if (d1 !== undefined) data.reminderDays1 = d1;
+  if (d2 !== undefined) data.reminderDays2 = d2;
+  if (d3 !== undefined) data.reminderDays3 = d3;
 
   const config = await prisma.aiAgentConfig.upsert({
     where: { id: "default" },

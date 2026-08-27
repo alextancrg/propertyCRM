@@ -55,6 +55,9 @@ export default async function AiPage() {
         autoMaintenanceTriage: cfg.autoMaintenanceTriage,
         autoViewingSchedule: cfg.autoViewingSchedule,
         tenantNames: cfg.tenantNames,
+        reminderDays1: cfg.reminderDays1,
+        reminderDays2: cfg.reminderDays2,
+        reminderDays3: cfg.reminderDays3,
       }}
       eligibleTenants={eligible}
       authorizedTenantIds={authorized}

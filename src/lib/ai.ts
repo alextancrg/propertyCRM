@@ -21,6 +21,11 @@ export type AgentConfig = {
   autoMaintenanceTriage: boolean;
   autoViewingSchedule: boolean;
   tenantNames: string;
+  // Rent reminder timing — days relative to the property's rent due date
+  // (negative = days before the due date, positive = days after).
+  reminderDays1: number;
+  reminderDays2: number;
+  reminderDays3: number;
 };
 
 export async function getAgentConfig(): Promise<AgentConfig> {
@@ -39,6 +44,9 @@ export async function getAgentConfig(): Promise<AgentConfig> {
       autoMaintenanceTriage: true,
       autoViewingSchedule: true,
       tenantNames: "",
+      reminderDays1: -3,
+      reminderDays2: 1,
+      reminderDays3: 3,
     };
   }
   // Migration: rows created before the DeepSeek era defaulted to provider
@@ -58,6 +66,9 @@ export async function getAgentConfig(): Promise<AgentConfig> {
     autoMaintenanceTriage: cfg.autoMaintenanceTriage,
     autoViewingSchedule: cfg.autoViewingSchedule,
     tenantNames: cfg.tenantNames,
+    reminderDays1: cfg.reminderDays1 ?? -3,
+    reminderDays2: cfg.reminderDays2 ?? 1,
+    reminderDays3: cfg.reminderDays3 ?? 3,
   };
 }
 

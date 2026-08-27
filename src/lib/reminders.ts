@@ -1,6 +1,6 @@
 import { prisma } from "./prisma";
 import { BillStatus, Lease, Tenant, Property, type Prisma } from "@prisma/client";
-import { logAudit } from "./ai";
+import { getAgentConfig, logAudit } from "./ai";
 import { formatMYR } from "./format";
 import { getAuthorizedTenantIds, dispatchWhatsAppMessage } from "./whatsapp";
 import type { SessionUser } from "./access";
@@ -31,30 +31,41 @@ function safeDay(year: number, month: number, day: number): number {
 }
 
 /**
- * Build the reminder message for a given stage.
+ * Human-readable stage label for a day offset, e.g. -3 → "D-3", 1 → "D+1".
+ * Used both as the dedup key (per lease + month + stage) and the UI label.
+ */
+function stageLabel(day: number): string {
+  if (day === 0) return "DUE DAY";
+  return day > 0 ? `D+${day}` : `D${day}`;
+}
+
+/**
+ * Build the reminder message for a given day offset. `day` is relative to the
+ * rent due date (negative = before, positive = after, 0 = due today).
  */
 export function buildReminderMessage(
   lease: LeaseWithRelations,
-  stage: string,
+  day: number,
   dueDate: Date,
+  isEscalation: boolean,
 ): string {
   const { property, tenant } = lease;
   const amount = formatMYR(lease.monthlyRent);
   const due = dueDate.toLocaleDateString("en-MY", { day: "2-digit", month: "short", year: "numeric" });
   const unit = property.name;
 
-  switch (stage) {
-    case "D-3":
-      return `Dear ${tenant.name}, this is a friendly reminder from the property management office. Your rent of ${amount} for ${unit} is due in 3 days (${due}). Kindly arrange payment before the due date. Thank you.`;
-    case "D+1":
-      return `Dear ${tenant.name}, a gentle reminder that your rent of ${amount} for ${unit} is now 1 day overdue (was due ${due}). Please settle at your earliest convenience to avoid late charges.`;
-    case "D+3":
-      return `Dear ${tenant.name}, this is a final reminder that your rent of ${amount} for ${unit} is 3 days overdue (was due ${due}). Please settle the outstanding amount immediately.`;
-    case "ESCALATED":
-      return `🚨 RENT OVERDUE — ${unit} | Tenant: ${tenant.name} (${tenant.phone ?? "no phone on file"}) | Amount: ${amount} | Due: ${due} | Automatic reminders have been exhausted. Immediate follow-up required.`;
-    default:
-      return "";
+  if (isEscalation) {
+    return `🚨 RENT OVERDUE — ${unit} | Tenant: ${tenant.name} (${tenant.phone ?? "no phone on file"}) | Amount: ${amount} | Due: ${due} | Automatic reminders have been exhausted. Immediate follow-up required.`;
   }
+
+  if (day < 0) {
+    const n = Math.abs(day);
+    return `Dear ${tenant.name}, this is a friendly reminder from the property management office. Your rent of ${amount} for ${unit} is due in ${n} day${n === 1 ? "" : "s"} (${due}). Kindly arrange payment before the due date. Thank you.`;
+  }
+  if (day === 0) {
+    return `Dear ${tenant.name}, this is a reminder that your rent of ${amount} for ${unit} is due today (${due}). Kindly arrange payment today. Thank you.`;
+  }
+  return `Dear ${tenant.name}, this is a reminder that your rent of ${amount} for ${unit} is now ${day} day${day === 1 ? "" : "s"} overdue (was due ${due}). Please settle at your earliest convenience to avoid late charges.`;
 }
 
 /**
@@ -105,6 +116,15 @@ export async function runRentReminders(
 
   const key = monthKey(now);
   const today = startOfDay(now);
+
+  // Rent alert timing is user-configurable (days relative to the due date,
+  // negative = before). Escalation fires once the last configured alert day
+  // has passed (always at least 6 days after the due date).
+  const cfg = await getAgentConfig();
+  const alertDays = [cfg.reminderDays1, cfg.reminderDays2, cfg.reminderDays3];
+  const lastAlertDay = Math.max(...alertDays, 0);
+  const escalateAfter = Math.max(6, lastAlertDay + 1);
+
   let reminders = 0;
   let escalated = 0;
   let skipped = 0;
@@ -138,10 +158,20 @@ export async function runRentReminders(
     const diff = daysDiff(today, dueDate);
 
     let stage: string | null = null;
-    if (diff === -3) stage = "D-3";
-    else if (diff === 1) stage = "D+1";
-    else if (diff === 3) stage = "D+3";
-    else if (diff >= 6) stage = "ESCALATED";
+    let alertDay = 0;
+    if (diff === alertDays[0]) {
+      stage = stageLabel(alertDays[0]);
+      alertDay = alertDays[0];
+    } else if (diff === alertDays[1]) {
+      stage = stageLabel(alertDays[1]);
+      alertDay = alertDays[1];
+    } else if (diff === alertDays[2]) {
+      stage = stageLabel(alertDays[2]);
+      alertDay = alertDays[2];
+    } else if (diff >= escalateAfter) {
+      stage = "ESCALATED";
+      alertDay = escalateAfter;
+    }
 
     if (!stage) {
       skipped++;
@@ -156,8 +186,8 @@ export async function runRentReminders(
       continue;
     }
 
-    const message = buildReminderMessage(lease, stage, dueDate);
     const isEscalation = stage === "ESCALATED";
+    const message = buildReminderMessage(lease, alertDay, dueDate, isEscalation);
 
     await prisma.rentReminder.create({
       data: {
