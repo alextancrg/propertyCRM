@@ -157,6 +157,16 @@ export async function PATCH(
           deposit: body.deposit !== undefined ? Number(body.deposit) : activeLease.deposit,
         },
       });
+      // Sync the linked tenant's contact details. Previously the name/phone were
+      // dropped whenever an active lease already existed, so editing a tenant's
+      // phone number on an existing property silently did nothing.
+      await prisma.tenant.update({
+        where: { id: activeLease.tenantId },
+        data: {
+          name: body.tenantName ?? undefined,
+          phone: body.tenantPhone !== undefined ? body.tenantPhone || null : undefined,
+        },
+      });
     } else {
       const tenant = await prisma.tenant.create({
         data: { name: body.tenantName, phone: body.tenantPhone ?? null },
