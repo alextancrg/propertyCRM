@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAgentConfig, generateAgentReply, type ChatTurn, logAudit } from "@/lib/ai";
-import { dispatchWhatsAppMessage, validateTwilioRequest } from "@/lib/whatsapp";
+import {
+  dispatchWhatsAppMessage,
+  expectedTwilioSignature,
+  validateTwilioRequest,
+} from "@/lib/whatsapp";
 import type { SessionUser } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
@@ -83,8 +87,15 @@ export async function POST(req: NextRequest) {
       const params: Record<string, string> = {};
       for (const [k, v] of form.entries()) params[k] = v;
       if (!validateTwilioRequest(authToken, signature, fullUrl, params)) {
+        // TEMP DEBUG — remove after diagnosing signature mismatch.
         return NextResponse.json(
-          { error: "invalid twilio signature" },
+          {
+            error: "invalid twilio signature",
+            fullUrl,
+            params,
+            expected: expectedTwilioSignature(authToken, fullUrl, params),
+            received: signature,
+          },
           { status: 403 },
         );
       }

@@ -49,6 +49,18 @@ function templateLanguage(lang: string | null | undefined): "en" | "ms" | "zh-CN
  * signing of WhatsApp/voice webhooks, including non-ASCII message bodies).
  * Returns false when the signature header is missing or does not match.
  */
+/** Compute the expected HMAC-SHA1 signature for a Twilio webhook request. */
+export function expectedTwilioSignature(
+  authToken: string,
+  url: string,
+  params: Record<string, string>,
+): string {
+  const data = Object.keys(params)
+    .sort()
+    .reduce((acc, key) => acc + key + params[key], url);
+  return crypto.createHmac("sha1", authToken).update(data).digest("base64");
+}
+
 export function validateTwilioRequest(
   authToken: string,
   signature: string,
@@ -56,11 +68,7 @@ export function validateTwilioRequest(
   params: Record<string, string>,
 ): boolean {
   if (!signature) return false;
-  const data = Object.keys(params)
-    .sort()
-    .reduce((acc, key) => acc + key + params[key], url);
-  const expected = crypto.createHmac("sha1", authToken).update(data).digest("base64");
-  return expected === signature;
+  return expectedTwilioSignature(authToken, url, params) === signature;
 }
 
 /** Whether Twilio WhatsApp credentials are configured. */

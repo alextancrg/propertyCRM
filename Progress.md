@@ -1,7 +1,70 @@
 # AssetHub — Implementation Progress
 
 > Tracked task: run the CRM feature checklist (owners, property managers, login,
-> updated-by, rename, bills). Last updated: 2026-08-25.
+> updated-by, rename, bills). Last updated: 2026-08-27.
+
+## Twilio WhatsApp AI agent round (2026-08-26) — authorized tenants, plan quotas, dashboard feed
+
+All implemented, browser-verified end-to-end locally, build green, committed `0908a06`.
+
+- **Support inbox**: default changed `assethubmy@gmail.com` → `goassethub@gmail.com`
+  (`src/lib/mail.ts` + `SupportClient`). Nav reordered: "Managers" → **"Profiles"** (#2 after
+  Dashboard), then Owners (#3), Properties & Leases (#4) — reorder `NAV` in `AppShell.tsx` + `TITLES`.
+- **Schema (BOTH files)**: new `AiAuthorizedTenant` (userId+tenantId `@@unique`; per-manager
+  authorized tenants) and `WhatsAppMessageLog` (userId?, tenantId?, propertyId?, tenantName?,
+  propertyName?, action, status `SENT|SKIPPED_QUOTA|TWILIO_NOT_CONFIGURED|FAILED|INFO`,
+  recipient?, message?, createdAt; `@@index([userId])`, `@@index([createdAt])`). `AiAgentConfig`
+  provider/model defaults → `deepseek` / `deepseek-v4-flash`.
+- **Plans**: `Plan.whatsappMessages` added — free 0, starter 10, growth 50, pro 150, business 300
+  (`planWhatsappLimit`). `billing.getUserWhatsappLimit(user)` = null (unlimited) for Administrator,
+  else the plan value.
+- **`src/lib/whatsapp.ts`** (new): `twilioConfigured()`, `logWhatsAppMessage`, `countWhatsappUsed`
+  (only status `SENT` this calendar month), `getWhatsappUsage`, `sendWhatsAppMessage` (Twilio
+  Messages API, Basic Auth SID:Token), `dispatchWhatsAppMessage` (quota-check + send + log every
+  attempt), `getEligibleTenants` (tenants with ACTIVE + running lease on visible properties),
+  `getAuthorizedTenantIds`, `setAuthorizedTenants` (only eligible ids),
+  `pruneExpiredAuthorizedTenants` (removes tenants whose active lease ended > 7 days ago; audit
+  `AUTO_REMOVED` + log `INFO`).
+- **AI agent**: `getAgentConfig` migrates legacy `provider:"mock"` rows → deepseek; model hidden
+  in UI ("pre-configured, not editable"). `generateAgentReply` uses
+  `AI_API_KEY || OPENAI_API_KEY`, base `AI_BASE_URL || OPENAI_BASE_URL || https://api.deepseek.com/v1`,
+  model `AI_MODEL || config.model || deepseek-v4-flash`; any non-mock provider treated as
+  OpenAI-compatible. Config route defaults to deepseek.
+- **API**: new `GET/POST /api/ai/tenants` (eligible + authorized + usage; GET prunes first).
+  `POST /api/whatsapp/reminders` passes `getSessionUser()` so the engine scopes to that manager's
+  authorized tenants + enforces their quota (cron w/o user = system Administrator actor, unlimited).
+  Webhook `/api/whatsapp/webhook` now parses Twilio form-encoded (Body/From) + legacy Meta JSON,
+  attributes the reply to the tenant's authorizer, replies via dispatch (quota + log).
+- **UI**: `AiSettings` rewritten — hidden model note, message-budget card ("X of Y left this
+  month", progress bar, red when exhausted), Twilio status badge, Authorized Tenants card
+  (dropdown of eligible not-yet-authorized + Add; chips with × remove; auto-save
+  `POST /api/ai/tenants`), prune notice banner, Twilio webhook setup note. Dashboard: "AI Agent
+  Actions (WhatsApp)" feed (grouped by tenant+action, status pill, every-execution datetime chip)
+  + "WhatsApp messages left: X of Y" badge.
+- ⚠️ **Local `next start` mismatch**: `.env.production` has the Neon Postgres URL but the locally
+  generated client is SQLite → "URL must start with file:". For local prod-mode testing run
+  `$env:DATABASE_URL='file:./dev.db'; npm run start -p 3100`. Seed owners now set
+  `createdById: manager.id` so properties are visible to the seeded manager (needed for eligible
+  tenants). `prisma db push` + `npm run db:seed` after schema changes; regenerate both clients
+  (pg first, then sqlite last so local `@prisma/client` is sqlite).
+- Verified end-to-end locally: hidden model, Twilio badge "not configured", budget 50/50 (Growth),
+  added Sarah authorized, added Rajesh then reload → auto-pruned with notice + `AUTO_REMOVED` log,
+  reminder engine D+1 for Sarah logged `TWILIO_NOT_CONFIGURED`, dashboard feed shows Sarah (Rent
+  reminder) + Rajesh (Auto-removed) with datetimes + "50 of 50" badge. Build green.
+- **To configure Twilio/agent in prod**: set `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`,
+  `TWILIO_WHATSAPP_FROM`, `AI_API_KEY` (DeepSeek-compatible), optionally `AI_BASE_URL`/`AI_MODEL`.
+  Tenant phones must be E.164 (e.g. +60…) for Twilio. Only status=`SENT` messages consume the quota.
+
+## Deploy + prod env (2026-08-27) — Twilio/AI live on assethubmy.vercel.app
+
+- `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM`, `AI_API_KEY` added to Vercel
+  **production** env.
+- Deployed `propai-6oiqepsqh-alex-tan` → re-aliased `assethubmy.vercel.app` (as required after
+  every deploy). Verified live: `/login` + `/privacy-policy` 200, temp `/api/billing/prices` 404;
+  logged in as admin → `/ai` shows **"Twilio connected"** badge, model **"pre-configured"**,
+  admin quota **"Unlimited · 0 sent"**.
+- Remaining manual step: point the Twilio WhatsApp sender's incoming webhook at
+  `https://assethubmy.vercel.app/api/whatsapp/webhook` (Twilio side); tenant phones must be E.164.
 
 ## Follow-up round (2026-08-25) — cancellation display, bill collapse/order, owner search
 
