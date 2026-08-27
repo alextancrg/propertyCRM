@@ -180,7 +180,9 @@ model AnnualIncome {
 model Tenant {
   id               String             @id @default(cuid())
   name             String
-  phone            String?  language         String   @default("en") // en | ms | zh-CN — WhatsApp template language for this tenant  email            String?
+  phone            String?
+  language         String   @default("en") // en | ms | zh-CN — WhatsApp template language for this tenant
+  email            String?
   icNumber         String?
   leases           Lease[]
   documents        Document[]
