@@ -163,7 +163,18 @@ export async function dispatchWhatsAppMessage(
 
   const res = await sendWhatsAppMessage({ to: input.phone, body: input.body });
   const status: MessageStatus = res.ok ? "SENT" : res.reason === "twilio-not-configured" ? "TWILIO_NOT_CONFIGURED" : "FAILED";
-  await logWhatsAppMessage({ ...base, status, recipient: input.phone });
+  // Persist the real Twilio error so the dashboard can show WHY a send failed
+  // (auth 401, invalid sender, session/template, quota, etc.) instead of a
+  // bare "Failed".
+  await logWhatsAppMessage({
+    ...base,
+    status,
+    recipient: input.phone,
+    message:
+      status === "FAILED"
+        ? `${input.body}\n[Twilio: ${res.reason ?? "unknown error"}]`
+        : input.body,
+  });
   return { status, sid: res.sid, reason: res.reason };
 }
 

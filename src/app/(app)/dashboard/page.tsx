@@ -42,6 +42,13 @@ function waTimestamp(d: Date): string {
   return d.toLocaleString("en-MY", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
+/** Pull the "[Twilio: …]" failure reason out of a logged message, if present. */
+function extractTwilioReason(message: string | null | undefined): string | undefined {
+  if (!message) return undefined;
+  const m = message.match(/\[Twilio:\s*([^\]]+)\]/);
+  return m ? m[1].trim() : undefined;
+}
+
 function startOfDay(d: Date): Date {
   const x = new Date(d);
   x.setHours(0, 0, 0, 0);
@@ -120,14 +127,19 @@ export default async function DashboardPage() {
   // Group attempts by tenant + action so repeated actions show every datetime.
   const waGroups = new Map<
     string,
-    { subject: string; action: string; status: string; at: string[] }
+    { subject: string; action: string; status: string; at: string[]; reason?: string }
   >();
   for (const log of whatsappLogs) {
     const subject = log.tenantName ?? log.propertyName ?? "System";
     const key = `${subject}::${log.action}`;
+    const reason = log.status === "FAILED" ? extractTwilioReason(log.message) : undefined;
     const existing = waGroups.get(key);
-    if (existing) existing.at.push(waTimestamp(log.createdAt));
-    else waGroups.set(key, { subject, action: log.action, status: log.status, at: [waTimestamp(log.createdAt)] });
+    if (existing) {
+      existing.at.push(waTimestamp(log.createdAt));
+      if (reason && !existing.reason) existing.reason = reason;
+    } else {
+      waGroups.set(key, { subject, action: log.action, status: log.status, at: [waTimestamp(log.createdAt)], reason });
+    }
   }
   const groupedWaLogs = Array.from(waGroups.values());
 
@@ -285,6 +297,11 @@ export default async function DashboardPage() {
                       </div>
                       <span className={`pill ${status.cls}`}>{statusLabel}</span>
                     </div>
+                    {g.reason && (
+                      <p className="mt-2 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                        <i className="fa-solid fa-circle-exclamation mr-1" /> {g.reason}
+                      </p>
+                    )}
                     {g.at.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {g.at.map((t, i) => (
