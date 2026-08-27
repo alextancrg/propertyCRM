@@ -4,6 +4,7 @@ import { formatMYR, formatDate, initials, cx } from "@/lib/format";
 import { requireUser } from "@/lib/auth";
 import { visiblePropertyIds } from "@/lib/access";
 import { getWhatsappUsage } from "@/lib/whatsapp";
+import { getTranslations } from "@/lib/i18n-server";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -18,21 +19,22 @@ const ACTIVITY_ICON: Record<string, { icon: string; cls: string }> = {
   AI_REPLY: { icon: "fa-robot", cls: "bg-emerald-100 text-emerald-600" },
 };
 
-const WA_ACTION_META: Record<string, { icon: string; cls: string; label: string }> = {
-  RENT_REMINDER: { icon: "fa-bell", cls: "bg-blue-100 text-blue-600", label: "Rent reminder" },
-  SELF_ALERT: { icon: "fa-triangle-exclamation", cls: "bg-red-100 text-red-600", label: "Self escalation" },
-  CHAT_REPLY: { icon: "fa-comment-dots", cls: "bg-emerald-100 text-emerald-600", label: "Chat reply" },
-  MAINTENANCE: { icon: "fa-wrench", cls: "bg-orange-100 text-orange-600", label: "Maintenance" },
-  VIEWING: { icon: "fa-calendar-check", cls: "bg-purple-100 text-purple-600", label: "Viewing" },
-  AUTO_REMOVED: { icon: "fa-user-minus", cls: "bg-slate-100 text-slate-600", label: "Auto-removed (lease expired)" },
+// action → i18n key (labels are looked up per-locale at render time).
+const WA_ACTION_META: Record<string, { icon: string; cls: string; labelKey: string }> = {
+  RENT_REMINDER: { icon: "fa-bell", cls: "bg-blue-100 text-blue-600", labelKey: "dashboard.waAction.rentReminder" },
+  SELF_ALERT: { icon: "fa-triangle-exclamation", cls: "bg-red-100 text-red-600", labelKey: "dashboard.waAction.selfAlert" },
+  CHAT_REPLY: { icon: "fa-comment-dots", cls: "bg-emerald-100 text-emerald-600", labelKey: "dashboard.waAction.chatReply" },
+  MAINTENANCE: { icon: "fa-wrench", cls: "bg-orange-100 text-orange-600", labelKey: "dashboard.waAction.maintenance" },
+  VIEWING: { icon: "fa-calendar-check", cls: "bg-purple-100 text-purple-600", labelKey: "dashboard.waAction.viewing" },
+  AUTO_REMOVED: { icon: "fa-user-minus", cls: "bg-slate-100 text-slate-600", labelKey: "dashboard.waAction.autoRemoved" },
 };
 
-const WA_STATUS_META: Record<string, { label: string; cls: string }> = {
-  SENT: { label: "Sent", cls: "bg-emerald-100 text-emerald-700" },
-  SKIPPED_QUOTA: { label: "Quota reached", cls: "bg-red-100 text-red-700" },
-  TWILIO_NOT_CONFIGURED: { label: "Twilio not configured", cls: "bg-amber-100 text-amber-700" },
-  FAILED: { label: "Failed", cls: "bg-red-100 text-red-700" },
-  INFO: { label: "Info", cls: "bg-slate-100 text-slate-600" },
+const WA_STATUS_META: Record<string, { labelKey: string; cls: string }> = {
+  SENT: { labelKey: "dashboard.waStatus.sent", cls: "bg-emerald-100 text-emerald-700" },
+  SKIPPED_QUOTA: { labelKey: "dashboard.waStatus.quotaReached", cls: "bg-red-100 text-red-700" },
+  TWILIO_NOT_CONFIGURED: { labelKey: "dashboard.waStatus.twilioNotConfigured", cls: "bg-amber-100 text-amber-700" },
+  FAILED: { labelKey: "dashboard.waStatus.failed", cls: "bg-red-100 text-red-700" },
+  INFO: { labelKey: "dashboard.waStatus.info", cls: "bg-slate-100 text-slate-600" },
 };
 
 function waTimestamp(d: Date): string {
@@ -41,6 +43,7 @@ function waTimestamp(d: Date): string {
 
 export default async function DashboardPage() {
   const me = await requireUser();
+  const { t } = await getTranslations();
   const currentYear = new Date().getFullYear();
   const startOfYear = new Date(`${currentYear}-01-01T00:00:00.000Z`);
 
@@ -104,10 +107,10 @@ export default async function DashboardPage() {
   const groupedWaLogs = Array.from(waGroups.values());
 
   const kpis = [
-    { label: "Total Properties", value: String(properties), icon: "fa-building", cls: "bg-blue-50 text-blue-600" },
-    { label: "Occupancy Rate", value: `${occupancy}%`, icon: "fa-check-circle", cls: "bg-green-50 text-green-600" },
-    { label: "Rent Arrears", value: formatMYR(arrears), icon: "fa-triangle-exclamation", cls: "bg-red-50 text-red-600", tone: "text-red-500" },
-    { label: "Open Utility Bills", value: String(unpaidBills), icon: "fa-bolt", cls: "bg-orange-50 text-orange-600" },
+    { label: t("dashboard.totalProperties"), value: String(properties), icon: "fa-building", cls: "bg-blue-50 text-blue-600" },
+    { label: t("dashboard.occupancyRate"), value: `${occupancy}%`, icon: "fa-check-circle", cls: "bg-green-50 text-green-600" },
+    { label: t("dashboard.rentArrears"), value: formatMYR(arrears), icon: "fa-triangle-exclamation", cls: "bg-red-50 text-red-600", tone: "text-red-500" },
+    { label: t("dashboard.openUtilityBills"), value: String(unpaidBills), icon: "fa-bolt", cls: "bg-orange-50 text-orange-600" },
   ];
 
   return (
@@ -135,22 +138,21 @@ export default async function DashboardPage() {
           <div className="mb-5 flex items-center justify-between">
             <h3 className="text-lg font-semibold text-slate-800">
               <i className="fa-solid fa-chart-line mr-2 text-primary" />
-              Portfolio Financial Snapshot
+              {t("dashboard.snapshot")}
             </h3>
             <Link href="/tax" className="text-sm font-semibold text-primary hover:underline">
-              View tax statements →
+              {t("dashboard.viewTaxStatements")}
             </Link>
           </div>
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-            <Metric label="Monthly Rent Roll" value={formatMYR(rentRoll._sum.monthlyRent ?? 0)} />
-            <Metric label="Collected (YTD)" value={formatMYR(collected)} positive />
-            <Metric label="Rent Arrears" value={formatMYR(arrears)} negative />
-            <Metric label="Expenses (YTD)" value={formatMYR(totalExpenses._sum.amount ?? 0)} />
+            <Metric label={t("dashboard.monthlyRentRoll")} value={formatMYR(rentRoll._sum.monthlyRent ?? 0)} />
+            <Metric label={t("dashboard.collectedYtd")} value={formatMYR(collected)} positive />
+            <Metric label={t("dashboard.rentArrears")} value={formatMYR(arrears)} negative />
+            <Metric label={t("dashboard.expensesYtd")} value={formatMYR(totalExpenses._sum.amount ?? 0)} />
           </div>
           <div className="mt-5 flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-3 text-sm text-slate-600">
             <i className="fa-solid fa-circle-info text-blue-500" />
-            Net rental position: {formatMYR(collected - (totalExpenses._sum.amount ?? 0))} — expenses are verified
-            against receipts in the document vault for LHDN compliance.
+            {t("dashboard.netPosition", { amount: formatMYR(collected - (totalExpenses._sum.amount ?? 0)) })}
           </div>
         </div>
 
@@ -158,9 +160,9 @@ export default async function DashboardPage() {
         <div className="card p-6">
           <h3 className="mb-4 text-lg font-semibold text-slate-800">
             <i className="fa-solid fa-triangle-exclamation mr-2 text-red-500" />
-            Rent Arrears
+            {t("dashboard.rentArrears")}
           </h3>
-          <ArrearsList scope={propIds} />
+          <ArrearsList scope={propIds} t={t} />
         </div>
       </div>
 
@@ -169,12 +171,12 @@ export default async function DashboardPage() {
         <div className="border-b border-slate-100 p-6">
           <h3 className="text-lg font-semibold text-slate-800">
             <i className="fa-solid fa-robot mr-2 text-primary" />
-            Recent Activity & AI Actions
+            {t("dashboard.recentActivity")}
           </h3>
         </div>
         <div className="divide-y divide-slate-100">
           {auditLogs.length === 0 && (
-            <p className="p-8 text-center text-sm text-slate-400">No activity recorded yet.</p>
+            <p className="p-8 text-center text-sm text-slate-400">{t("dashboard.noActivity")}</p>
           )}
           {auditLogs.map((log) => {
             const meta = ACTIVITY_ICON[log.action] ?? { icon: "fa-clock", cls: "bg-slate-100 text-slate-500" };
@@ -188,7 +190,7 @@ export default async function DashboardPage() {
                     <p className="text-sm font-semibold text-slate-800">{log.action.replace("_", " ")} · {log.entityType}</p>
                     <p className="text-xs text-slate-500">
                       {log.description}
-                      {log.user ? <span className="font-medium text-slate-600"> · by {log.user.name}</span> : null}
+                      {log.user ? <span className="font-medium text-slate-600">{t("dashboard.byUser", { name: log.user.name })}</span> : null}
                     </p>
                   </div>
                 </div>
@@ -205,11 +207,9 @@ export default async function DashboardPage() {
           <div>
             <h3 className="text-lg font-semibold text-slate-800">
               <i className="fa-solid fa-robot mr-2 text-primary" />
-              AI Agent Actions (WhatsApp)
+              {t("dashboard.waTitle")}
             </h3>
-            <p className="text-sm text-slate-500">
-              What the WhatsApp AI agent tried on your tenants, and when — repeated actions show every execution time.
-            </p>
+            <p className="text-sm text-slate-500">{t("dashboard.waSubtitle")}</p>
           </div>
           <span
             className={cx(
@@ -223,21 +223,21 @@ export default async function DashboardPage() {
           >
             <i className="fa-solid fa-message mr-1" />
             {waUsage.limit === null
-              ? `WhatsApp messages sent this month: ${waUsage.used} (unlimited)`
-              : `WhatsApp messages left: ${waUsage.left} of ${waUsage.limit}`}
+              ? t("dashboard.waSentUnlimited", { used: waUsage.used })
+              : t("dashboard.waLeft", { left: waUsage.left ?? 0, limit: waUsage.limit })}
           </span>
         </div>
 
         <div className="px-6 pb-6 pt-4">
           {groupedWaLogs.length === 0 ? (
-            <p className="py-6 text-center text-sm text-slate-400">
-              No AI agent actions yet. Configure your authorized tenants under WhatsApp AI Agent and run the reminder engine.
-            </p>
+            <p className="py-6 text-center text-sm text-slate-400">{t("dashboard.waEmpty")}</p>
           ) : (
             <ul className="space-y-3">
               {groupedWaLogs.map((g) => {
-                const meta = WA_ACTION_META[g.action] ?? { icon: "fa-clock", cls: "bg-slate-100 text-slate-500", label: g.action.replace(/_/g, " ") };
-                const status = WA_STATUS_META[g.status] ?? { label: g.status, cls: "bg-slate-100 text-slate-600" };
+                const meta = WA_ACTION_META[g.action] ?? { icon: "fa-clock", cls: "bg-slate-100 text-slate-500", labelKey: null as string | null };
+                const status = WA_STATUS_META[g.status] ?? { labelKey: null as string | null, cls: "bg-slate-100 text-slate-600" };
+                const actionLabel = meta.labelKey ? t(meta.labelKey) : g.action.replace(/_/g, " ");
+                const statusLabel = status.labelKey ? t(status.labelKey) : g.status;
                 return (
                   <li key={`${g.subject}::${g.action}`} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -247,10 +247,10 @@ export default async function DashboardPage() {
                         </div>
                         <div>
                           <p className="text-sm font-semibold text-slate-800">{g.subject}</p>
-                          <p className="text-xs text-slate-500">{meta.label}</p>
+                          <p className="text-xs text-slate-500">{actionLabel}</p>
                         </div>
                       </div>
-                      <span className={`pill ${status.cls}`}>{status.label}</span>
+                      <span className={`pill ${status.cls}`}>{statusLabel}</span>
                     </div>
                     {g.at.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
@@ -284,7 +284,7 @@ function Metric({ label, value, positive, negative }: { label: string; value: st
   );
 }
 
-async function ArrearsList({ scope }: { scope: string[] | null }) {
+async function ArrearsList({ scope, t }: { scope: string[] | null; t: (key: string, vars?: Record<string, string | number>) => string }) {
   const arrears = await prisma.rentPayment.findMany({
     where: {
       status: BillStatus.UNPAID,
@@ -296,7 +296,7 @@ async function ArrearsList({ scope }: { scope: string[] | null }) {
   });
 
   if (arrears.length === 0) {
-    return <p className="text-sm text-slate-400">No outstanding rent. 🎉</p>;
+    return <p className="text-sm text-slate-400">{t("dashboard.noOutstandingRent")}</p>;
   }
 
   return (

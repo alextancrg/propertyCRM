@@ -5,33 +5,36 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cx } from "@/lib/format";
 import { RouteProgress } from "@/components/RouteProgress";
+import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { useI18n } from "@/lib/i18n";
 
 const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: "fa-chart-pie" },
-  { href: "/managers", label: "Profiles", icon: "fa-user-gear" },
-  { href: "/owners", label: "Owners", icon: "fa-users" },
-  { href: "/properties", label: "Properties & Leases", icon: "fa-house" },
-  { href: "/bills", label: "Bills & Utilities", icon: "fa-list-check" },
-  { href: "/rentals", label: "Rental Collection", icon: "fa-hand-holding-dollar" },
-  { href: "/tax", label: "Tax & Audit", icon: "fa-file-invoice-dollar" },
-  { href: "/documents", label: "Documents", icon: "fa-folder-open" },
-  { href: "/subscription", label: "Subscription", icon: "fa-crown" },
-  { href: "/ai", label: "WhatsApp AI Agent", icon: "fa-robot" },
-  { href: "/support", label: "Support", icon: "fa-life-ring" },
+  { href: "/dashboard", key: "dashboard", icon: "fa-chart-pie" },
+  { href: "/managers", key: "managers", icon: "fa-user-gear" },
+  { href: "/owners", key: "owners", icon: "fa-users" },
+  { href: "/properties", key: "properties", icon: "fa-house" },
+  { href: "/bills", key: "bills", icon: "fa-list-check" },
+  { href: "/rentals", key: "rentals", icon: "fa-hand-holding-dollar" },
+  { href: "/tax", key: "tax", icon: "fa-file-invoice-dollar" },
+  { href: "/documents", key: "documents", icon: "fa-folder-open" },
+  { href: "/subscription", key: "subscription", icon: "fa-crown" },
+  { href: "/ai", key: "ai", icon: "fa-robot" },
+  { href: "/support", key: "support", icon: "fa-life-ring" },
 ];
 
-const TITLES: Record<string, string> = {
-  "/dashboard": "Portfolio Overview",
-  "/managers": "Profiles",
-  "/owners": "Owners & Landlords",
-  "/properties": "Properties & Leases",
-  "/bills": "Bills & Utility Payments",
-  "/rentals": "Rental Collection",
-  "/tax": "Tax & Compliance Audit",
-  "/documents": "Document Vault",
-  "/subscription": "Subscription & Billing",
-  "/ai": "WhatsApp AI Agent",
-  "/support": "Support & Feedback",
+// pathname → i18n dictionary key for the header/page title.
+const TITLE_KEYS: Record<string, string> = {
+  "/dashboard": "titles.dashboard",
+  "/managers": "titles.managers",
+  "/owners": "titles.owners",
+  "/properties": "titles.properties",
+  "/bills": "titles.bills",
+  "/rentals": "titles.rentals",
+  "/tax": "titles.tax",
+  "/documents": "titles.documents",
+  "/subscription": "titles.subscription",
+  "/ai": "titles.ai",
+  "/support": "titles.support",
 };
 
 // Short-lived cache for the header's user + AI-agent status so full page loads
@@ -41,6 +44,7 @@ const SHELL_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { t } = useI18n();
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
   const [user, setUser] = useState<{ id: string; name: string; email: string; role: string } | null>(null);
 
@@ -98,7 +102,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     window.location.href = "/login";
   }
 
-  const title = TITLES[pathname] ?? "AssetHub";
+  const title = TITLE_KEYS[pathname] ? t(TITLE_KEYS[pathname]) : "AssetHub";
 
   return (
     <>
@@ -112,7 +116,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div>
             <h1 className="text-lg font-bold leading-tight tracking-tight">AssetHub</h1>
-            <p className="text-[11px] text-blue-300">Intelligent Portfolio Manager</p>
+            <p className="text-[11px] text-blue-300">{t("app.tagline")}</p>
           </div>
         </div>
 
@@ -131,7 +135,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 )}
               >
                 <i className={cx("fa-solid w-5 text-center text-[15px]", item.icon, active ? "text-accent" : "text-blue-300 group-hover:text-white")} />
-                {item.label}
+                {t(`nav.${item.key}`)}
                 {active && <span className="ml-auto h-2 w-2 rounded-full bg-accent" />}
               </Link>
             );
@@ -145,11 +149,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold">{user ? user.name : "…"}</p>
-              <p className="truncate text-xs text-blue-300">{user ? user.role : "Not signed in"}</p>
+              <p className="truncate text-xs text-blue-300">{user ? t(`roles.${user.role}`) : t("app.notSignedIn")}</p>
             </div>
             <button
               onClick={signOut}
-              title="Sign out"
+              title={t("app.signOut")}
               className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-blue-300 transition hover:bg-white/10 hover:text-white"
             >
               <i className="fa-solid fa-right-from-bracket text-xs" />
@@ -159,7 +163,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             href="/privacy-policy"
             className="mt-3 flex items-center justify-center gap-1.5 text-[11px] font-medium text-blue-300 transition hover:text-white"
           >
-            <i className="fa-solid fa-shield-halved text-[10px]" /> Privacy Policy
+            <i className="fa-solid fa-shield-halved text-[10px]" /> {t("app.privacyPolicy")}
           </Link>
         </div>
       </aside>
@@ -181,7 +185,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                     ? "border-emerald-200 bg-emerald-50 text-emerald-700"
                     : "border-slate-200 bg-slate-100 text-slate-500",
               )}
-              title="WhatsApp AI agent status — click to configure"
+              title={t("header.agentTitle")}
             >
               <span
                 className={cx(
@@ -189,9 +193,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   aiEnabled === null ? "bg-slate-300" : aiEnabled ? "bg-emerald-500 blinking-dot" : "bg-slate-400",
                 )}
               />
-              {aiEnabled === null ? "Agent…" : aiEnabled ? "AI Agent Live" : "AI Agent Off"}
+              {aiEnabled === null ? t("header.agentChecking") : aiEnabled ? t("header.agentLive") : t("header.agentOff")}
             </Link>
-            <button className="grid h-9 w-9 place-items-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50">
+            <LanguageSwitcher variant="light" />
+            <button
+              title={t("header.notifications")}
+              className="grid h-9 w-9 place-items-center rounded-full border border-slate-200 text-slate-500 transition hover:bg-slate-50"
+            >
               <i className="fa-regular fa-bell" />
             </button>
           </div>

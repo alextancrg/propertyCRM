@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cx, formatDate } from "@/lib/format";
+import { useI18n } from "@/lib/i18n";
 
 type Config = {
   enabled: boolean;
@@ -63,7 +64,10 @@ export function AiSettings({
   initialMessages: Msg[];
   initialReminders: Reminder[];
 }) {
-  const [config, setConfig] = useState<Config>(initialConfig);
+  const { t } = useI18n();
+  // Escalations are always routed to the logged-in property manager's account
+  // email. The field is read-only, so default the persisted value to it too.
+  const [config, setConfig] = useState<Config>({ ...initialConfig, escalationEmail: me.email });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -96,14 +100,20 @@ export function AiSettings({
       const res = await fetch("/api/whatsapp/reminders", { method: "POST" });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        setRunResult(`Dispatched ${data.reminders ?? 0} reminder(s) · escalated ${data.escalated ?? 0} · skipped ${data.skipped ?? 0}.`);
+        setRunResult(
+          t("ai.runResult", {
+            reminders: data.reminders ?? 0,
+            escalated: data.escalated ?? 0,
+            skipped: data.skipped ?? 0,
+          }),
+        );
         const list = await fetch("/api/whatsapp/reminders").then((r) => r.json());
         setReminders(list.reminders ?? []);
         const tenantsRes = await fetch("/api/ai/tenants");
         const tenantsData = await tenantsRes.json().catch(() => ({}));
         if (tenantsData?.usage) setUsage(tenantsData.usage);
       } else {
-        setRunResult("Could not run the reminder engine.");
+        setRunResult(t("ai.runFailed"));
       }
     } finally {
       setRunning(false);
@@ -163,10 +173,10 @@ export function AiSettings({
       setAuthorized(data.authorized ?? nextIds);
       if (data.usage) setUsage(data.usage);
       setSelectedCandidate("");
-      setTenantSuccess("Authorized tenants updated.");
+      setTenantSuccess(t("ai.authorizedUpdated"));
       setTimeout(() => setTenantSuccess(null), 2000);
     } catch (err) {
-      setTenantError(err instanceof Error ? err.message : "Something went wrong.");
+      setTenantError(err instanceof Error ? err.message : t("common.somethingWentWrong"));
     } finally {
       setSavingTenants(false);
     }
@@ -198,7 +208,7 @@ export function AiSettings({
       const data = await res.json();
       setMessages((m) => [...m.filter((x) => x.id !== optimistic.id), optimistic, { id: `ai-${Date.now()}`, role: "ai", content: data.reply }]);
     } catch {
-      setMessages((m) => [...m, { id: `ai-${Date.now()}`, role: "ai", content: "Sorry, something went wrong. Please try again." }]);
+      setMessages((m) => [...m, { id: `ai-${Date.now()}`, role: "ai", content: t("ai.chatError") }]);
     } finally {
       setSending(false);
     }
@@ -224,18 +234,16 @@ export function AiSettings({
               <i className="fa-brands fa-whatsapp" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-900">WhatsApp AI Agent</h3>
-              <p className="max-w-xl text-sm text-slate-500">
-                Communicates with your authorized tenants — rent reminders, maintenance triage, and viewing scheduling — over WhatsApp via Twilio.
-              </p>
+              <h3 className="text-lg font-bold text-slate-900">{t("ai.heroTitle")}</h3>
+              <p className="max-w-xl text-sm text-slate-500">{t("ai.heroDesc")}</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className={cx("pill", config.enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-600")}>
                   <i className={cx("fa-solid", config.enabled ? "fa-circle-check" : "fa-circle-pause")} />
-                  {config.enabled ? "Enabled" : "Disabled"}
+                  {config.enabled ? t("ai.enabled") : t("ai.disabled")}
                 </span>
                 <span className={cx("pill", twilioConfigured ? "bg-sky-100 text-sky-700" : "bg-amber-100 text-amber-700")}>
                   <i className={cx("fa-solid", twilioConfigured ? "fa-circle-check" : "fa-triangle-exclamation")} />
-                  Twilio {twilioConfigured ? "connected" : "not configured"}
+                  {twilioConfigured ? t("ai.twilioConnected") : t("ai.twilioNotConfigured")}
                 </span>
               </div>
             </div>
@@ -249,7 +257,7 @@ export function AiSettings({
               "relative h-8 w-16 shrink-0 rounded-full transition-colors",
               config.enabled ? "bg-emerald-500" : "bg-slate-300",
             )}
-            title={config.enabled ? "Disable agent" : "Enable agent"}
+            title={config.enabled ? t("ai.disableAgent") : t("ai.enableAgent")}
           >
             <span
               className={cx(
@@ -270,18 +278,20 @@ export function AiSettings({
               <div>
                 <p className="text-sm font-semibold text-slate-800">
                   {usage.limit === null
-                    ? "Unlimited WhatsApp messages"
-                    : `${usage.left} of ${usage.limit} WhatsApp messages left this month`}
+                    ? t("ai.unlimitedMessages")
+                    : t("ai.messagesLeft", { left: usage.left ?? 0, limit: usage.limit })}
                 </p>
                 <p className="text-xs text-slate-500">
-                  {usage.limit === null ? `${usage.used} sent · no plan limit` : `${usage.used} used · ${planName} plan`}
+                  {usage.limit === null
+                    ? t("ai.sentNoLimit", { used: usage.used })
+                    : t("ai.usedPlan", { used: usage.used, planName })}
                 </p>
               </div>
             </div>
             {quotaExhausted && (
               <span className="rounded-lg bg-red-100 px-3 py-1.5 text-xs font-bold text-red-700">
                 <i className="fa-solid fa-triangle-exclamation mr-1" />
-                Monthly quota reached — upgrade your plan for more messages
+                {t("ai.quotaExhausted")}
               </span>
             )}
           </div>
@@ -298,7 +308,7 @@ export function AiSettings({
         {prunedCount > 0 && (
           <p className="mt-4 rounded-lg bg-sky-50 px-3 py-2 text-xs font-semibold text-sky-700">
             <i className="fa-solid fa-user-minus mr-1" />
-            {prunedCount} tenant{prunedCount === 1 ? "" : "s"} whose lease expired over a week ago {prunedCount === 1 ? "was" : "were"} removed from the authorized list and you&apos;ve been notified.
+            {t("ai.prunedNotice", { count: prunedCount })}
           </p>
         )}
       </div>
@@ -308,67 +318,63 @@ export function AiSettings({
         <form onSubmit={saveForm} className="card space-y-5 p-6">
           <div className="flex items-center justify-between">
             <h4 className="text-base font-bold text-slate-900">
-              <i className="fa-solid fa-sliders mr-2 text-primary" /> Configuration
+              <i className="fa-solid fa-sliders mr-2 text-primary" /> {t("ai.configuration")}
             </h4>
-            {saved && <span className="text-xs font-semibold text-emerald-600"><i className="fa-solid fa-check" /> Saved</span>}
+            {saved && <span className="text-xs font-semibold text-emerald-600"><i className="fa-solid fa-check" /> {t("ai.saved")}</span>}
           </div>
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs leading-relaxed text-slate-500">
             <i className="fa-solid fa-lock mr-1" />
-            The AI model is pre-configured for your account and is not editable.
+            {t("ai.modelLocked")}
           </div>
 
           <div>
-            <label className="label mb-1">Autonomy level</label>
+            <label className="label mb-1">{t("ai.autonomyLevel")}</label>
             <select value={config.autonomyLevel} onChange={(e) => setConfig({ ...config, autonomyLevel: e.target.value })} className="input cursor-pointer">
-              <option value="semi">Semi-autonomous (human-in-the-loop)</option>
-              <option value="full">Fully autonomous</option>
+              <option value="semi">{t("ai.semiOption")}</option>
+              <option value="full">{t("ai.fullOption")}</option>
             </select>
             <p className="mt-1 text-xs text-slate-500">
-              {config.autonomyLevel === "full"
-                ? "The agent handles the full conversation with the tenant and takes actions itself."
-                : "The agent chats with the tenant but defers decisions and escalations to the property manager."}
+              {config.autonomyLevel === "full" ? t("ai.fullDesc") : t("ai.semiDesc")}
             </p>
           </div>
 
           <div>
-            <label className="label mb-1">Greeting message</label>
-            <input value={config.greeting} onChange={(e) => setConfig({ ...config, greeting: e.target.value })} className="input" placeholder="Hi, this is the property management office…" />
+            <label className="label mb-1">{t("ai.greeting")}</label>
+            <input value={config.greeting} onChange={(e) => setConfig({ ...config, greeting: e.target.value })} className="input" placeholder={t("ai.greetingPlaceholder")} />
           </div>
 
           <div>
-            <label className="label mb-1">System prompt</label>
+            <label className="label mb-1">{t("ai.systemPrompt")}</label>
             <textarea value={config.systemPrompt} onChange={(e) => setConfig({ ...config, systemPrompt: e.target.value })} rows={4} className="input resize-none" />
           </div>
 
           <div>
-            <label className="label mb-1">Escalation email</label>
-            <input value={config.escalationEmail} onChange={(e) => setConfig({ ...config, escalationEmail: e.target.value })} className="input" placeholder="manager@example.my" />
+            <label className="label mb-1">{t("ai.escalationEmail")}</label>
+            <input
+              value={me.email}
+              disabled
+              className="input cursor-not-allowed bg-slate-100 text-slate-500"
+              title={me.email}
+            />
+            <p className="mt-1 text-xs text-slate-500">
+              {t("ai.escalationHint", { email: me.email })}
+            </p>
           </div>
 
           <div>
-            <p className="label mb-2">Automation behaviours</p>
+            <p className="label mb-2">{t("ai.automationBehaviours")}</p>
             <div className="space-y-2">
-              <Toggle label="Auto rent reminder" desc="Nudge tenants with overdue rent." checked={config.autoRentReminder} onChange={() => toggleField("autoRentReminder")} />
-              <Toggle label="Auto maintenance triage" desc="Classify and log maintenance requests." checked={config.autoMaintenanceTriage} onChange={() => toggleField("autoMaintenanceTriage")} />
-              <Toggle label="Auto viewing scheduling" desc="Propose viewing slots for vacant units." checked={config.autoViewingSchedule} onChange={() => toggleField("autoViewingSchedule")} />
+              <Toggle label={t("ai.autoRentReminder")} desc={t("ai.autoRentReminderDesc")} checked={config.autoRentReminder} onChange={() => toggleField("autoRentReminder")} />
+              <Toggle label={t("ai.autoMaintenanceTriage")} desc={t("ai.autoMaintenanceTriageDesc")} checked={config.autoMaintenanceTriage} onChange={() => toggleField("autoMaintenanceTriage")} />
+              <Toggle label={t("ai.autoViewingSchedule")} desc={t("ai.autoViewingScheduleDesc")} checked={config.autoViewingSchedule} onChange={() => toggleField("autoViewingSchedule")} />
             </div>
           </div>
 
           <button type="submit" disabled={saving} className="btn-primary w-full justify-center">
-            {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : "Save configuration"}
+            {saving ? <><i className="fa-solid fa-spinner fa-spin" /> {t("ai.saving")}</> : t("ai.saveConfig")}
           </button>
 
-          <div className="rounded-xl bg-slate-50 p-4 text-xs leading-relaxed text-slate-500">
-            <p className="mb-1 font-bold uppercase tracking-wide text-slate-400">Twilio WhatsApp webhook</p>
-            <p>
-              Point your Twilio WhatsApp sender&apos;s <strong>&quot;When a message comes in&quot;</strong> webhook to{" "}
-              <code className="rounded bg-slate-200 px-1">/api/whatsapp/webhook</code> (method POST). Required environment variables:{" "}
-              <code className="rounded bg-slate-200 px-1">TWILIO_ACCOUNT_SID</code>,{" "}
-              <code className="rounded bg-slate-200 px-1">TWILIO_AUTH_TOKEN</code> and{" "}
-              <code className="rounded bg-slate-200 px-1">TWILIO_WHATSAPP_FROM</code>. When the agent is disabled, inbound messages are recorded but not answered.
-            </p>
-          </div>
         </form>
 
         {/* Right column: authorized tenants + chat simulator */}
@@ -377,13 +383,11 @@ export function AiSettings({
           <div className="card p-6">
             <div className="flex items-center justify-between">
               <h4 className="text-base font-bold text-slate-900">
-                <i className="fa-solid fa-user-check mr-2 text-primary" /> Authorized Tenants
+                <i className="fa-solid fa-user-check mr-2 text-primary" /> {t("ai.authorizedTenants")}
               </h4>
-              {savingTenants && <span className="text-xs font-medium text-slate-400"><i className="fa-solid fa-spinner fa-spin" /> Saving…</span>}
+              {savingTenants && <span className="text-xs font-medium text-slate-400"><i className="fa-solid fa-spinner fa-spin" /> {t("ai.saving")}</span>}
             </div>
-            <p className="mt-1 text-sm text-slate-500">
-              These are the only tenants the AI agent will contact. Eligible tenants are those with an active lease on a unit you manage. Tenants whose lease expired over a week ago are removed automatically.
-            </p>
+            <p className="mt-1 text-sm text-slate-500">{t("ai.authorizedTenantsDesc")}</p>
 
             {tenantError && (
               <p className="mt-3 rounded-lg bg-red-50 px-3 py-2 text-xs font-medium text-red-600">
@@ -404,7 +408,7 @@ export function AiSettings({
                 className="input cursor-pointer"
                 disabled={candidates.length === 0}
               >
-                <option value="">{candidates.length === 0 ? "No more eligible tenants" : "Select a tenant to add…"}</option>
+                <option value="">{candidates.length === 0 ? t("ai.noMoreEligible") : t("ai.selectTenantToAdd")}</option>
                 {candidates.map((t) => (
                   <option key={t.id} value={t.id}>
                     {t.name}{t.unit ? ` — ${t.unit}` : ""}{t.phone ? ` (${t.phone})` : ""}
@@ -412,7 +416,7 @@ export function AiSettings({
                 ))}
               </select>
               <button type="button" onClick={addTenant} disabled={!selectedCandidate || savingTenants} className="btn-primary shrink-0">
-                <i className="fa-solid fa-plus" /> Add
+                <i className="fa-solid fa-plus" /> {t("ai.add")}
               </button>
             </div>
 
@@ -420,28 +424,28 @@ export function AiSettings({
             <div className="mt-4 space-y-2">
               {authorized.length === 0 && (
                 <p className="rounded-xl border border-dashed border-slate-200 p-4 text-center text-sm text-slate-400">
-                  No tenants authorized yet. Add tenants from the dropdown above.
+                  {t("ai.noAuthorizedYet")}
                 </p>
               )}
               {authorized.map((id) => {
-                const t = eligible.find((e) => e.id === id);
+                const tenant = eligible.find((e) => e.id === id);
                 return (
                   <div key={id} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 px-4 py-3">
                     <div className="grid h-9 w-9 place-items-center rounded-full bg-primary-100 text-xs font-bold text-primary-700">
-                      {(t?.name ?? "?").slice(0, 2).toUpperCase()}
+                      {(tenant?.name ?? "?").slice(0, 2).toUpperCase()}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold text-slate-800">{t?.name ?? id}</p>
+                      <p className="truncate text-sm font-semibold text-slate-800">{tenant?.name ?? id}</p>
                       <p className="truncate text-xs text-slate-500">
-                        {t?.unit ?? ""}
-                        {t?.phone ? ` · ${t.phone}` : ""}
+                        {tenant?.unit ?? ""}
+                        {tenant?.phone ? ` · ${tenant.phone}` : ""}
                       </p>
                     </div>
                     <button
                       type="button"
                       onClick={() => removeTenant(id)}
                       disabled={savingTenants}
-                      title="Remove from authorized list"
+                      title={t("ai.removeFromAuthorized")}
                       className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600"
                     >
                       <i className="fa-solid fa-xmark" />
@@ -460,13 +464,13 @@ export function AiSettings({
                   <i className="fa-solid fa-robot" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold leading-tight">AssetHub Assistant</p>
+                  <p className="text-sm font-semibold leading-tight">{t("ai.assistantName")}</p>
                   <p className="text-[11px] text-emerald-200">
-                    {config.enabled ? "online — replying automatically" : "offline — agent disabled"}
+                    {config.enabled ? t("ai.online") : t("ai.offline")}
                   </p>
                 </div>
               </div>
-              <button onClick={resetChat} className="rounded-full p-2 text-emerald-200 transition hover:bg-white/10" title="Clear conversation">
+              <button onClick={resetChat} className="rounded-full p-2 text-emerald-200 transition hover:bg-white/10" title={t("ai.clearConversation")}>
                 <i className="fa-solid fa-broom" />
               </button>
             </div>
@@ -475,7 +479,7 @@ export function AiSettings({
               {messages.length === 0 && (
                 <div className="mx-auto mt-16 max-w-xs rounded-xl bg-white p-4 text-center text-sm text-slate-500 shadow-sm">
                   <i className="fa-brands fa-whatsapp mb-2 text-2xl text-emerald-500" />
-                  <p>Start a test conversation. Try “my rent is overdue” or “there is a water leak”.</p>
+                  <p>{t("ai.chatEmpty")}</p>
                 </div>
               )}
               {messages.map((m) => (
@@ -504,7 +508,7 @@ export function AiSettings({
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendMessage()}
-                placeholder={config.enabled ? "Type a tenant message…" : "Agent is disabled — test messages are recorded only"}
+                placeholder={config.enabled ? t("ai.typeMessage") : t("ai.agentDisabledPlaceholder")}
                 className="input flex-1 rounded-full px-4"
               />
               <button
@@ -524,18 +528,12 @@ export function AiSettings({
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-6">
           <div>
             <h4 className="text-base font-bold text-slate-900">
-              <i className="fa-solid fa-bell mr-2 text-primary" /> Rent Reminder Engine
+              <i className="fa-solid fa-bell mr-2 text-primary" /> {t("ai.reminderEngine")}
             </h4>
-            <p className="max-w-3xl text-sm text-slate-500">
-              Based on each property&apos;s rent due date, the agent reminds the tenant <strong>3 days before</strong>,{" "}
-              <strong>1 day after</strong> and <strong>3 days after</strong> the due date. Once the reminders are exhausted and
-              the rent is still unpaid, a <strong>self-WhatsApp alert</strong> (red highlighted) is raised with the unit name and
-              the tenant&apos;s phone number. Only your <strong>authorized tenants</strong> are contacted, and every message counts
-              against your plan&apos;s monthly WhatsApp quota.
-            </p>
+            <p className="max-w-3xl text-sm text-slate-500">{t("ai.reminderEngineDesc")}</p>
           </div>
           <button onClick={runReminders} disabled={running} className="btn-primary">
-            <i className="fa-solid fa-play" /> {running ? "Running…" : "Run reminders now"}
+            <i className="fa-solid fa-play" /> {running ? t("ai.running") : t("ai.runReminders")}
           </button>
         </div>
 
@@ -547,9 +545,7 @@ export function AiSettings({
 
         <div className="px-6 pb-6">
           {reminders.length === 0 ? (
-            <p className="text-sm text-slate-400">
-              No reminders sent yet. Run the engine now, or schedule it to hit <code className="rounded bg-slate-200 px-1">POST /api/whatsapp/reminders</code> daily (e.g. Vercel Cron).
-            </p>
+            <p className="text-sm text-slate-400">{t("ai.noRemindersYet")}</p>
           ) : (
             <ul className="max-h-96 space-y-2 overflow-y-auto">
               {reminders.map((r) => (
@@ -558,14 +554,14 @@ export function AiSettings({
                     <p className={cx("text-xs font-bold uppercase tracking-wide", r.self ? "text-red-600" : "text-slate-500")}>
                       <i className={cx("mr-1", r.self ? "fa-solid fa-triangle-exclamation" : "fa-solid fa-bell")} />
                       {r.stage} · {r.month} · {r.property}
-                      {r.self && <span className="ml-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] text-white">SELF WHATSAPP</span>}
+                      {r.self && <span className="ml-1 rounded bg-red-600 px-1.5 py-0.5 text-[10px] text-white">{t("ai.selfWhatsappBadge")}</span>}
                     </p>
                     <span className="shrink-0 text-[10px] font-medium text-slate-400">{formatDate(r.sentAt)}</span>
                   </div>
                   <p className={cx("mt-1", r.self ? "font-semibold text-red-700" : "text-slate-600")}>{r.message}</p>
                   {r.self && r.phone && (
                     <p className="mt-1 text-xs font-bold text-red-600">
-                      <i className="fa-brands fa-whatsapp mr-1" /> Tenant phone: {r.phone}
+                      <i className="fa-brands fa-whatsapp mr-1" /> {t("ai.tenantPhone", { phone: r.phone })}
                     </p>
                   )}
                 </li>

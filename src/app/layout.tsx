@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { LocaleProvider } from "@/lib/i18n";
+import { getLocaleFromCookies } from "@/lib/i18n-server";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -17,11 +19,12 @@ export const metadata: Metadata = {
 // The root layout only owns the document shell. The authenticated application
 // chrome (<AppShell/>) lives in src/app/(app)/layout.tsx so that public pages
 // (e.g. /privacy-policy) render standalone without the sidebar.
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
+  const locale = await getLocaleFromCookies();
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang={locale} className={inter.variable}>
       <head>
         <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossOrigin="anonymous" />
         <link
@@ -30,7 +33,9 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
       </head>
-      <body className="font-sans">{children}</body>
+      <body className="font-sans">
+        <LocaleProvider initialLocale={locale}>{children}</LocaleProvider>
+      </body>
     </html>
   );
 }
