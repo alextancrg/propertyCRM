@@ -15,7 +15,13 @@ import { visiblePropertyIds, type SessionUser } from "./access";
 
 const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
-const TWILIO_FROM = process.env.TWILIO_WHATSAPP_FROM || "whatsapp:+14155238886";
+
+/** Accepts either "whatsapp:+60…" or a bare "+60…" — always sends the WhatsApp channel prefix. */
+function normalizeWhatsappSender(raw: string | undefined): string {
+  if (!raw) return "whatsapp:+14155238886"; // Twilio sandbox fallback
+  return raw.startsWith("whatsapp:") ? raw : `whatsapp:${raw}`;
+}
+const TWILIO_FROM = normalizeWhatsappSender(process.env.TWILIO_WHATSAPP_FROM);
 // Optional approved WhatsApp Content Template SIDs, per language. When set,
 // outbound messages are sent with ContentSid + ContentVariables instead of a
 // free-form Body — required by WhatsApp for proactive messages sent outside the
