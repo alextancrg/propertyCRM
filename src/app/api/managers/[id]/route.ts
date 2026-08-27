@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { hashPassword, getSessionUser } from "@/lib/auth";
 import { logAudit } from "@/lib/ai";
+import { normalizePhoneE164 } from "@/lib/phone";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +58,7 @@ export async function PATCH(
     data: {
       name: typeof body.name === "string" && body.name.trim() ? body.name.trim() : existing.name,
       email,
-      phone: typeof body.phone === "string" ? body.phone.trim() : existing.phone,
+      phone: typeof body.phone === "string" ? normalizePhoneE164(body.phone) : existing.phone,
       role:
         isAdmin && typeof body.role === "string" && body.role
           ? body.role

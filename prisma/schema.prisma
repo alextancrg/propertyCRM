@@ -327,6 +327,7 @@ model AiAgentConfig {
   reminderDays1          Int      @default(-3) // rent alert 1: days relative to due date (negative = before)
   reminderDays2          Int      @default(1) // rent alert 2: days relative to due date
   reminderDays3          Int      @default(3) // rent alert 3: days relative to due date
+  reminderEscalationDays Int      @default(6) // self-escalation: days overdue before the red self-WhatsApp alert
   updatedAt              DateTime @updatedAt
 }
 

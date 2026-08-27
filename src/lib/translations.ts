@@ -115,6 +115,9 @@ const en = {
     waLeft: "WhatsApp messages left: {left} of {limit}",
     waEmpty: "No AI agent actions yet. Configure your authorized tenants under WhatsApp AI Agent and run the reminder engine.",
     noOutstandingRent: "No outstanding rent. 🎉",
+    daysOverdue: "{count} day(s) overdue",
+    escalated: "Escalated",
+    escalationOverdue: "Escalated · {count} day(s) overdue",
     waAction: {
       rentReminder: "Rent reminder",
       selfAlert: "Self escalation",
@@ -174,6 +177,9 @@ const en = {
     alert1: "Alert 1",
     alert2: "Alert 2",
     alert3: "Alert 3",
+    escAfter: "Self-escalate after (days overdue)",
+    escAfterHint:
+      "Raises the red self-WhatsApp alert once the rent is this many days past due — always after the last alert.",
     saveConfig: "Save configuration",
     saving: "Saving…",
     authorizedTenants: "Authorized Tenants",
@@ -197,6 +203,8 @@ const en = {
     reminderEngineDesc:
       "Based on each property's rent due date, the agent sends the rent alerts at the days you configure (before or after the due date). Once the alerts are exhausted and the rent is still unpaid, a self-WhatsApp alert (red highlighted) is raised with the unit name and the tenant's phone number. Only your authorized tenants are contacted, and every message counts against your plan's monthly WhatsApp quota.",
     runReminders: "Run reminders now",
+    selfAlertHint:
+      "Self-escalation alerts are sent to your own WhatsApp — set your phone in Profiles (+60…) so they can be delivered.",
     running: "Running…",
     runResult: "Dispatched {reminders} reminder(s) · escalated {escalated} · skipped {skipped}.",
     runFailed: "Could not run the reminder engine.",
@@ -309,6 +317,9 @@ const msPatch: DeepPartial<Dictionary> = {
     waEmpty:
       "Belum ada tindakan ejen AI. Konfigurasikan penyewa yang dibenarkan di bawah Ejen AI WhatsApp dan jalankan enjin peringatan.",
     noOutstandingRent: "Tiada tunggakan sewa. 🎉",
+    daysOverdue: "terlewat {count} hari",
+    escalated: "Teleskala",
+    escalationOverdue: "Teleskala · terlewat {count} hari",
     waAction: {
       rentReminder: "Peringatan sewa",
       selfAlert: "Eskalasi kendiri",
@@ -368,6 +379,9 @@ const msPatch: DeepPartial<Dictionary> = {
     alert1: "Amaran 1",
     alert2: "Amaran 2",
     alert3: "Amaran 3",
+    escAfter: "Eskalasi kendiri selepas (hari terlewat)",
+    escAfterHint:
+      "Menaikkan amaran WhatsApp kendiri (merah) apabila sewa terlewat sebanyak hari ini — sentiasa selepas amaran terakhir.",
     saveConfig: "Simpan konfigurasi",
     saving: "Menyimpan…",
     authorizedTenants: "Penyewa Dibenarkan",
@@ -391,6 +405,8 @@ const msPatch: DeepPartial<Dictionary> = {
     reminderEngineDesc:
       "Berdasarkan tarikh akhir sewa setiap hartanah, ejen menghantar amaran sewa pada hari yang anda konfigurasikan (sebelum atau selepas tarikh akhir). Apabila amaran habis dan sewa masih belum dibayar, amaran WhatsApp kendiri (diserlahkan merah) dinaikkan dengan nama unit dan nombor telefon penyewa. Hanya penyewa yang anda benarkan dihubungi, dan setiap mesej dikira terhadap kuota WhatsApp bulanan pelan anda.",
     runReminders: "Jalankan peringatan sekarang",
+    selfAlertHint:
+      "Amaran eskalasi kendiri dihantar ke WhatsApp anda — tetapkan telefon anda di Profil (+60…) supaya ia dapat dihantar.",
     running: "Sedang berjalan…",
     runResult: "Menghantar {reminders} peringatan · eskalasi {escalated} · dilangkau {skipped}.",
     runFailed: "Tidak dapat menjalankan enjin peringatan.",
@@ -495,6 +511,9 @@ const zhPatch: DeepPartial<Dictionary> = {
     waLeft: "剩余 WhatsApp 消息：{left} / {limit}",
     waEmpty: "暂无 AI 助手操作。请在“WhatsApp AI 助手”下配置授权租客并运行提醒引擎。",
     noOutstandingRent: "无未付租金。🎉",
+    daysOverdue: "逾期 {count} 天",
+    escalated: "已升级",
+    escalationOverdue: "已升级 · 逾期 {count} 天",
     waAction: {
       rentReminder: "租金提醒",
       selfAlert: "自我升级",
@@ -552,6 +571,8 @@ const zhPatch: DeepPartial<Dictionary> = {
     alert1: "提醒 1",
     alert2: "提醒 2",
     alert3: "提醒 3",
+    escAfter: "自我升级（逾期天数）",
+    escAfterHint: "当租金逾期达到此天数时触发红色自我 WhatsApp 警报 — 始终在最后一条提醒之后。",
     saveConfig: "保存配置",
     saving: "保存中…",
     authorizedTenants: "授权租客",
@@ -575,6 +596,7 @@ const zhPatch: DeepPartial<Dictionary> = {
     reminderEngineDesc:
       "根据每处房产的租金到期日，助手会在您配置的天数发送租金提醒（到期日前或后）。当提醒用尽且租金仍未支付时，会发出自我 WhatsApp 警报（红色突出显示），并附上单元名称和租客电话号码。仅会联系您授权的租客，每条消息都会计入您计划的每月 WhatsApp 配额。",
     runReminders: "立即运行提醒",
+    selfAlertHint: "自我升级警报会发送到您自己的 WhatsApp — 请在“账户”中设置您的电话号码（+60…）以便送达。",
     running: "运行中…",
     runResult: "已发送 {reminders} 条提醒 · 升级 {escalated} · 跳过 {skipped}。",
     runFailed: "无法运行提醒引擎。",

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDate } from "@/lib/format";
+import { normalizePhoneE164 } from "@/lib/phone";
 
 type Manager = {
   id: string;
@@ -316,7 +317,13 @@ export function ManagersClient({
             </div>
             <div>
               <label className="label mb-1">Phone</label>
-              <input className="input" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+              <input
+                className="input"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                onBlur={() => setForm((f) => ({ ...f, phone: normalizePhoneE164(f.phone) ?? f.phone }))}
+                placeholder="01x-xxx-xxxx (auto-converted to +60…)"
+              />
             </div>
             <div>
               <label className="label mb-1">Role</label>

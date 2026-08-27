@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { hashPassword, getSessionUser } from "@/lib/auth";
 import { visibleManagerIds } from "@/lib/access";
 import { logAudit } from "@/lib/ai";
+import { normalizePhoneE164 } from "@/lib/phone";
 
 export const dynamic = "force-dynamic";
 
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
-  const phone = typeof body.phone === "string" ? body.phone.trim() : null;
+  const phone = normalizePhoneE164(typeof body.phone === "string" ? body.phone : null);
 
   if (!name || !email || !password) {
     return NextResponse.json({ error: "Name, email and password are required." }, { status: 400 });

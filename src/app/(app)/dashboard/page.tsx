@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { visiblePropertyIds } from "@/lib/access";
 import { getWhatsappUsage } from "@/lib/whatsapp";
 import { getTranslations } from "@/lib/i18n-server";
+import { dueDateForMonth } from "@/lib/rentals";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,17 @@ const WA_STATUS_META: Record<string, { labelKey: string; cls: string }> = {
 
 function waTimestamp(d: Date): string {
   return d.toLocaleString("en-MY", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
+function startOfDay(d: Date): Date {
+  const x = new Date(d);
+  x.setHours(0, 0, 0, 0);
+  return x;
+}
+
+/** Whole days from b to a (clamped at 0). */
+function daysBetween(a: Date, b: Date): number {
+  return Math.max(0, Math.round((startOfDay(a).getTime() - startOfDay(b).getTime()) / 86_400_000));
 }
 
 export default async function DashboardPage() {
@@ -91,6 +103,19 @@ export default async function DashboardPage() {
     }),
     getWhatsappUsage(me),
   ]);
+
+  // Days overdue at the moment each self-escalation (red self-alert) was raised,
+  // keyed by tenant name so the AI Agent Actions feed can show "X days overdue".
+  const escalatedReminders = await prisma.rentReminder.findMany({
+    where: { self: true, ...(propIds ? { lease: { propertyId: { in: propIds } } } : {}) },
+    include: { lease: { select: { tenant: { select: { name: true } } } } },
+    orderBy: { sentAt: "desc" },
+  });
+  const escalationDays = new Map<string, number>();
+  for (const r of escalatedReminders) {
+    if (escalationDays.has(r.lease.tenant.name)) continue;
+    escalationDays.set(r.lease.tenant.name, r.dueDate ? daysBetween(r.sentAt, r.dueDate) : 0);
+  }
 
   // Group attempts by tenant + action so repeated actions show every datetime.
   const waGroups = new Map<
@@ -238,6 +263,8 @@ export default async function DashboardPage() {
                 const status = WA_STATUS_META[g.status] ?? { labelKey: null as string | null, cls: "bg-slate-100 text-slate-600" };
                 const actionLabel = meta.labelKey ? t(meta.labelKey) : g.action.replace(/_/g, " ");
                 const statusLabel = status.labelKey ? t(status.labelKey) : g.status;
+                const escalationOverdue =
+                  g.action === "SELF_ALERT" ? escalationDays.get(g.subject) : undefined;
                 return (
                   <li key={`${g.subject}::${g.action}`} className="rounded-xl border border-slate-100 bg-slate-50/60 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -248,6 +275,12 @@ export default async function DashboardPage() {
                         <div>
                           <p className="text-sm font-semibold text-slate-800">{g.subject}</p>
                           <p className="text-xs text-slate-500">{actionLabel}</p>
+                          {g.action === "SELF_ALERT" && escalationOverdue !== undefined && (
+                            <p className="mt-0.5 text-xs font-semibold text-red-600">
+                              <i className="fa-solid fa-triangle-exclamation mr-1" />
+                              {t("dashboard.escalationOverdue", { count: escalationOverdue })}
+                            </p>
+                          )}
                         </div>
                       </div>
                       <span className={`pill ${status.cls}`}>{statusLabel}</span>
@@ -299,20 +332,45 @@ async function ArrearsList({ scope, t }: { scope: string[] | null; t: (key: stri
     return <p className="text-sm text-slate-400">{t("dashboard.noOutstandingRent")}</p>;
   }
 
+  // Which of these arrears have already been escalated (self-WhatsApp raised)?
+  const escalatedKeys = new Set<string>();
+  const escalatedReminders = await prisma.rentReminder.findMany({
+    where: {
+      self: true,
+      leaseId: { in: arrears.map((a) => a.leaseId) },
+      month: { in: arrears.map((a) => a.month) },
+    },
+    select: { leaseId: true, month: true },
+  });
+  escalatedReminders.forEach((r) => escalatedKeys.add(`${r.leaseId}::${r.month}`));
+
   return (
     <ul className="space-y-3">
-      {arrears.map((a) => (
-        <li key={a.id} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3">
-          <div className="grid h-9 w-9 place-items-center rounded-full bg-purple-100 text-xs font-bold text-purple-700">
-            {initials(a.lease.tenant.name)}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-slate-800">{a.lease.tenant.name}</p>
-            <p className="truncate text-xs text-slate-500">{a.lease.property.name}</p>
-          </div>
-          <span className="text-sm font-bold text-red-500">{formatMYR(a.amount)}</span>
-        </li>
-      ))}
+      {arrears.map((a) => {
+        const dueDate = dueDateForMonth(a.month, a.lease.startDate);
+        const daysOverdue = daysBetween(new Date(), dueDate);
+        const isEscalated = escalatedKeys.has(`${a.leaseId}::${a.month}`);
+        return (
+          <li key={a.id} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3">
+            <div className="grid h-9 w-9 place-items-center rounded-full bg-purple-100 text-xs font-bold text-purple-700">
+              {initials(a.lease.tenant.name)}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-slate-800">{a.lease.tenant.name}</p>
+              <p className="truncate text-xs text-slate-500">{a.lease.property.name}</p>
+              <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] font-semibold text-red-500">
+                {t("dashboard.daysOverdue", { count: daysOverdue })}
+                {isEscalated && (
+                  <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-700">
+                    <i className="fa-solid fa-triangle-exclamation mr-0.5" /> {t("dashboard.escalated")}
+                  </span>
+                )}
+              </p>
+            </div>
+            <span className="text-sm font-bold text-red-500">{formatMYR(a.amount)}</span>
+          </li>
+        );
+      })}
     </ul>
   );
 }

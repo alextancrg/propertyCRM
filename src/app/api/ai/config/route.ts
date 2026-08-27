@@ -24,6 +24,7 @@ type UpdateData = Partial<{
   reminderDays1: number;
   reminderDays2: number;
   reminderDays3: number;
+  reminderEscalationDays: number;
 }>;
 
 // Clamp the per-alert day offsets to ±31 (within a calendar month).
@@ -31,6 +32,13 @@ function clampReminderDay(v: unknown): number | undefined {
   const n = Number(v);
   if (!Number.isFinite(n) || !Number.isInteger(n)) return undefined;
   return Math.max(-31, Math.min(31, n));
+}
+
+// Clamp the self-escalation threshold to 0–365 days overdue.
+function clampEscalationDays(v: unknown): number | undefined {
+  const n = Number(v);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return undefined;
+  return Math.max(0, Math.min(365, n));
 }
 
 export async function PATCH(req: NextRequest) {
@@ -54,6 +62,8 @@ export async function PATCH(req: NextRequest) {
   if (d1 !== undefined) data.reminderDays1 = d1;
   if (d2 !== undefined) data.reminderDays2 = d2;
   if (d3 !== undefined) data.reminderDays3 = d3;
+  const esc = clampEscalationDays(body.reminderEscalationDays);
+  if (esc !== undefined) data.reminderEscalationDays = esc;
 
   const config = await prisma.aiAgentConfig.upsert({
     where: { id: "default" },

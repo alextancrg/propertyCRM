@@ -123,7 +123,9 @@ export async function runRentReminders(
   const cfg = await getAgentConfig();
   const alertDays = [cfg.reminderDays1, cfg.reminderDays2, cfg.reminderDays3];
   const lastAlertDay = Math.max(...alertDays, 0);
-  const escalateAfter = Math.max(6, lastAlertDay + 1);
+  // Self-escalation fires once the rent is overdue past the configured
+  // threshold (default 6 days), always after the last configured alert.
+  const escalateAfter = Math.max(cfg.reminderEscalationDays ?? 6, lastAlertDay + 1);
 
   let reminders = 0;
   let escalated = 0;

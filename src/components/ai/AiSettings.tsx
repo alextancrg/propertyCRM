@@ -19,6 +19,7 @@ type Config = {
   reminderDays1: number;
   reminderDays2: number;
   reminderDays3: number;
+  reminderEscalationDays: number;
 };
 
 type Msg = { id: string; role: "ai" | "tenant"; content: string };
@@ -419,6 +420,20 @@ export function AiSettings({
                 />
               </div>
             </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <div className="w-36">
+                <label className="label mb-1">{t("ai.escAfter")}</label>
+                <input
+                  type="number"
+                  value={config.reminderEscalationDays}
+                  onChange={(e) => setConfig({ ...config, reminderEscalationDays: parseInt(e.target.value || "0", 10) })}
+                  className="input"
+                  min={0}
+                  max={365}
+                />
+              </div>
+              <p className="max-w-sm text-xs text-slate-500">{t("ai.escAfterHint")}</p>
+            </div>
           </div>
 
           <button type="submit" disabled={saving} className="btn-primary w-full justify-center">
@@ -606,6 +621,9 @@ export function AiSettings({
               <i className="fa-solid fa-play" /> {running ? t("ai.running") : t("ai.runReminders")}
             </button>
           </div>
+          <p className="mt-3 w-full text-[11px] text-slate-400">
+            <i className="fa-solid fa-circle-info mr-1" /> {t("ai.selfAlertHint")}
+          </p>
         </div>
 
         {runResult && (

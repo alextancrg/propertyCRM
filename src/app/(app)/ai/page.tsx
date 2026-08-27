@@ -58,6 +58,7 @@ export default async function AiPage() {
         reminderDays1: cfg.reminderDays1,
         reminderDays2: cfg.reminderDays2,
         reminderDays3: cfg.reminderDays3,
+        reminderEscalationDays: cfg.reminderEscalationDays,
       }}
       eligibleTenants={eligible}
       authorizedTenantIds={authorized}

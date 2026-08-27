@@ -26,6 +26,8 @@ export type AgentConfig = {
   reminderDays1: number;
   reminderDays2: number;
   reminderDays3: number;
+  // Self-escalation: days overdue before the red self-WhatsApp alert fires.
+  reminderEscalationDays: number;
 };
 
 export async function getAgentConfig(): Promise<AgentConfig> {
@@ -47,6 +49,7 @@ export async function getAgentConfig(): Promise<AgentConfig> {
       reminderDays1: -3,
       reminderDays2: 1,
       reminderDays3: 3,
+      reminderEscalationDays: 6,
     };
   }
   // Migration: rows created before the DeepSeek era defaulted to provider
@@ -69,6 +72,7 @@ export async function getAgentConfig(): Promise<AgentConfig> {
     reminderDays1: cfg.reminderDays1 ?? -3,
     reminderDays2: cfg.reminderDays2 ?? 1,
     reminderDays3: cfg.reminderDays3 ?? 3,
+    reminderEscalationDays: cfg.reminderEscalationDays ?? 6,
   };
 }
 
