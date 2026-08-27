@@ -4,12 +4,14 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { formatDate } from "@/lib/format";
 import { normalizePhoneE164 } from "@/lib/phone";
+import { SUPPORTED_LOCALES } from "@/lib/translations";
 
 type Manager = {
   id: string;
   name: string;
   email: string;
   phone: string | null;
+  language: string;
   role: string;
   createdAt: string;
   updatedAt: string;
@@ -54,6 +56,7 @@ export function ManagersClient({
     email: "",
     phone: "",
     role: "Property Manager",
+    language: "en",
     password: "",
   });
   const [error, setError] = useState<string | null>(null);
@@ -68,13 +71,13 @@ export function ManagersClient({
   const [responding, setResponding] = useState<string | null>(null);
 
   function resetForm() {
-    setForm({ name: "", email: "", phone: "", role: "Property Manager", password: "" });
+    setForm({ name: "", email: "", phone: "", role: "Property Manager", language: "en", password: "" });
     setError(null);
   }
 
   function openEdit(m: Manager) {
     setEditing(m);
-    setForm({ name: m.name, email: m.email, phone: m.phone ?? "", role: m.role, password: "" });
+    setForm({ name: m.name, email: m.email, phone: m.phone ?? "", role: m.role, language: m.language ?? "en", password: "" });
     setShowRegister(false);
   }
 
@@ -330,6 +333,16 @@ export function ManagersClient({
               <select className="input cursor-pointer" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} disabled={!isAdmin}>
                 <option>Property Manager</option>
                 <option>Administrator</option>
+              </select>
+            </div>
+            <div>
+              <label className="label mb-1">Language (WhatsApp)</label>
+              <select className="input cursor-pointer" value={form.language} onChange={(e) => setForm({ ...form, language: e.target.value })}>
+                {SUPPORTED_LOCALES.map((l) => (
+                  <option key={l.value} value={l.value}>
+                    {l.native}
+                  </option>
+                ))}
               </select>
             </div>
             <div className="sm:col-span-2">

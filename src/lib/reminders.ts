@@ -109,7 +109,13 @@ export async function runRentReminders(
 
   // For quota-free cron/system runs use an Administrator actor (unlimited).
   const actor: SessionUser =
-    user ?? { id: "system", name: "System", email: "system@goassethub.com", role: "Administrator" };
+    user ?? {
+      id: "system",
+      name: "System",
+      email: "system@goassethub.com",
+      role: "Administrator",
+      language: "en",
+    };
   const managerPhone = user
     ? (await prisma.user.findUnique({ where: { id: user.id }, select: { phone: true } }))?.phone ?? null
     : null;
@@ -213,6 +219,7 @@ export async function runRentReminders(
         phone: managerPhone,
         action: "SELF_ALERT",
         body: message,
+        language: actor.language, // manager's template language
         // Escalation-template variables (used when the escalation SID is set):
         // 1 = unit, 2 = tenant name, 3 = tenant phone, 4 = amount, 5 = due date.
         contentVariables: {
@@ -242,6 +249,7 @@ export async function runRentReminders(
         phone: lease.tenant.phone,
         action: "RENT_REMINDER",
         body: message,
+        language: lease.tenant.language, // tenant's template language
         // Approved-template variables (used when TWILIO_WHATSAPP_CONTENT_SID is set):
         // 1 = name, 2 = amount, 3 = unit, 4 = due date.
         contentVariables: {

@@ -78,7 +78,7 @@ export async function clearSessionCookie(): Promise<void> {
 
 /** Resolve the currently logged-in user (null when anonymous / invalid). */
 export async function getSessionUser(): Promise<
-  { id: string; name: string; email: string; role: string } | null
+  { id: string; name: string; email: string; role: string; language: string } | null
 > {
   const store = await cookies();
   const token = store.get(AUTH_COOKIE)?.value;
@@ -87,7 +87,7 @@ export async function getSessionUser(): Promise<
   if (!userId) return null;
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, name: true, email: true, role: true },
+    select: { id: true, name: true, email: true, role: true, language: true },
   });
   return user;
 }

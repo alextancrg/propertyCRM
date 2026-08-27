@@ -22,6 +22,7 @@ export async function GET() {
       name: true,
       email: true,
       phone: true,
+      language: true,
       role: true,
       createdAt: true,
       updatedAt: true,
@@ -69,10 +70,11 @@ export async function POST(req: NextRequest) {
       name,
       email,
       phone,
+      language: ["en", "ms", "zh-CN"].includes(body.language) ? body.language : "en",
       role: typeof body.role === "string" && body.role ? body.role : "Property Manager",
       passwordHash: await hashPassword(password),
     },
-    select: { id: true, name: true, email: true, phone: true, role: true, createdAt: true, updatedAt: true },
+    select: { id: true, name: true, email: true, phone: true, language: true, role: true, createdAt: true, updatedAt: true },
   });
 
   await logAudit("User", "CREATED", `Property manager registered: ${manager.name} (${manager.email}).`, undefined, me.id);

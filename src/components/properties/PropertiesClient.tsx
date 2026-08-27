@@ -7,6 +7,7 @@ import Link from "next/link";
 import { cx, formatMYR, formatDate, initials } from "@/lib/format";
 import { PROPERTY_TYPES, PROPERTY_MAX_REMARKS } from "@/lib/properties";
 import { normalizePhoneE164 } from "@/lib/phone";
+import { SUPPORTED_LOCALES } from "@/lib/translations";
 
 type PropertyDTO = {
   id: string;
@@ -21,7 +22,7 @@ type PropertyDTO = {
   rentStartDate: string | null;
   soldDate: string | null;
   owners: { ownerId: string; name: string; phone: string | null; icNumber: string | null; sharePercent: number }[];
-  tenant: { id: string; name: string; phone: string | null } | null;
+  tenant: { id: string; name: string; phone: string | null; language: string } | null;
   monthlyRent: number | null;
   lease: {
     id: string;
@@ -465,6 +466,7 @@ function PropertyFormModal({
   );
   const [tenantName, setTenantName] = useState(property?.lease?.tenantName ?? property?.tenant?.name ?? "");
   const [tenantPhone, setTenantPhone] = useState(property?.lease?.tenantPhone ?? property?.tenant?.phone ?? "");
+  const [tenantLanguage, setTenantLanguage] = useState(property?.tenant?.language ?? "en");
   // Open-ended lease: no end date — runs until further notice.
   const [openEnded, setOpenEnded] = useState(property?.lease ? !property.lease.endDate : true);
 
@@ -523,6 +525,7 @@ function PropertyFormModal({
       owners: ownersPayload,
       tenantName: tenantName || null,
       tenantPhone: tenantPhone || null,
+      tenantLanguage: tenantLanguage || null,
       monthlyRent: rentAmount === "" ? undefined : Number(rentAmount),
       deposit: fd.get("deposit"),
       startDate: fd.get("startDate") || null,
@@ -743,6 +746,20 @@ function PropertyFormModal({
                   className="input"
                   placeholder="01x-xxx-xxxx (auto-converted to +60…)"
                 />
+              </div>
+              <div>
+                <label className="label mb-1">Tenant language (WhatsApp)</label>
+                <select
+                  value={tenantLanguage}
+                  onChange={(e) => setTenantLanguage(e.target.value)}
+                  className="input cursor-pointer"
+                >
+                  {SUPPORTED_LOCALES.map((l) => (
+                    <option key={l.value} value={l.value}>
+                      {l.native}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="label mb-1">Monthly rent (RM)</label>

@@ -79,7 +79,11 @@ export async function POST(req: NextRequest) {
   // Optional tenant + lease.
   if (body.tenantName) {
     const tenant = await prisma.tenant.create({
-      data: { name: body.tenantName, phone: normalizePhoneE164(body.tenantPhone) },
+      data: {
+        name: body.tenantName,
+        phone: normalizePhoneE164(body.tenantPhone),
+        language: ["en", "ms", "zh-CN"].includes(body.tenantLanguage) ? body.tenantLanguage : "en",
+      },
     });
     await prisma.lease.create({
       data: {

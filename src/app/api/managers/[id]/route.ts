@@ -59,6 +59,10 @@ export async function PATCH(
       name: typeof body.name === "string" && body.name.trim() ? body.name.trim() : existing.name,
       email,
       phone: typeof body.phone === "string" ? normalizePhoneE164(body.phone) : existing.phone,
+      language:
+        typeof body.language === "string" && ["en", "ms", "zh-CN"].includes(body.language)
+          ? body.language
+          : existing.language,
       role:
         isAdmin && typeof body.role === "string" && body.role
           ? body.role

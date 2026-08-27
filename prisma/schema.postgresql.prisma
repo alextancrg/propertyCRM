@@ -28,6 +28,7 @@ model User {
   phone               String?
   passwordHash        String?
   role                String              @default("Property Manager")
+  language            String              @default("en") // en | ms | zh-CN — WhatsApp template language for this user's messages
   auditLogs           AuditLog[]
   createdOwners       Owner[]             @relation("OwnerCreatedBy") // owners this manager registered
   managedOwners       OwnerManager[]      // owners assigned to this manager
@@ -179,8 +180,7 @@ model AnnualIncome {
 model Tenant {
   id               String             @id @default(cuid())
   name             String
-  phone            String?
-  email            String?
+  phone            String?  language         String   @default("en") // en | ms | zh-CN — WhatsApp template language for this tenant  email            String?
   icNumber         String?
   leases           Lease[]
   documents        Document[]

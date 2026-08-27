@@ -19,6 +19,7 @@ export default async function ManagersPage() {
         name: true,
         email: true,
         phone: true,
+        language: true,
         role: true,
         createdAt: true,
         updatedAt: true,

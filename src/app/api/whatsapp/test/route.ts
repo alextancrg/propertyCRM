@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
     action: "RENT_REMINDER",
     phone: lease.tenant.phone,
     body: message,
+    language: lease.tenant.language, // tenant's template language
     // Approved-template variables (used when TWILIO_WHATSAPP_CONTENT_SID is set):
     // 1 = name, 2 = amount, 3 = unit, 4 = due date.
     contentVariables: {

@@ -15,16 +15,29 @@ import { visiblePropertyIds, type SessionUser } from "./access";
 const TWILIO_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 const TWILIO_FROM = process.env.TWILIO_WHATSAPP_FROM || "whatsapp:+14155238886";
-// Optional approved WhatsApp Content Template SIDs. When set, outbound messages
-// are sent with ContentSid + ContentVariables instead of a free-form Body —
-// required by WhatsApp for proactive messages sent outside the 24-hour session
-// window. Placeholders used by the app:
-//   Rent reminder / test (TWILIO_WHATSAPP_CONTENT_SID):
+// Optional approved WhatsApp Content Template SIDs, per language. When set,
+// outbound messages are sent with ContentSid + ContentVariables instead of a
+// free-form Body — required by WhatsApp for proactive messages sent outside the
+// 24-hour session window. Placeholders used by the app:
+//   Rent reminder / test (TWILIO_WHATSAPP_CONTENT_SID[_MS|_ZH]):
 //     {{1}} = tenant name · {{2}} = rent amount · {{3}} = unit · {{4}} = due date
-//   Self-escalation alert (TWILIO_WHATSAPP_CONTENT_SID_ESCALATION):
+//   Self-escalation alert (TWILIO_WHATSAPP_CONTENT_SID_ESCALATION[_MS|_ZH]):
 //     {{1}} = unit · {{2}} = tenant name · {{3}} = tenant phone · {{4}} = amount · {{5}} = due date
-const TWILIO_CONTENT_SID = process.env.TWILIO_WHATSAPP_CONTENT_SID || null;
-const TWILIO_CONTENT_SID_ESCALATION = process.env.TWILIO_WHATSAPP_CONTENT_SID_ESCALATION || null;
+const CONTENT_SIDS: Record<string, string | null> = {
+  en: process.env.TWILIO_WHATSAPP_CONTENT_SID || null,
+  ms: process.env.TWILIO_WHATSAPP_CONTENT_SID_MS || null,
+  "zh-CN": process.env.TWILIO_WHATSAPP_CONTENT_SID_ZH || null,
+};
+const CONTENT_SIDS_ESCALATION: Record<string, string | null> = {
+  en: process.env.TWILIO_WHATSAPP_CONTENT_SID_ESCALATION || null,
+  ms: process.env.TWILIO_WHATSAPP_CONTENT_SID_ESCALATION_MS || null,
+  "zh-CN": process.env.TWILIO_WHATSAPP_CONTENT_SID_ESCALATION_ZH || null,
+};
+
+/** Normalize a language tag for template lookup (falls back to English). */
+function templateLanguage(lang: string | null | undefined): "en" | "ms" | "zh-CN" {
+  return lang === "ms" || lang === "zh-CN" ? lang : "en";
+}
 
 /** Whether Twilio WhatsApp credentials are configured. */
 export function twilioConfigured(): boolean {
@@ -145,8 +158,10 @@ export type DispatchInput = {
   body: string;
   /** When set (and a matching TWILIO_WHATSAPP_CONTENT_SID* is configured), sends via the approved template. */
   contentVariables?: Record<string, string> | null;
-  /** Optional explicit template SID (defaults: RENT_REMINDER/test → main SID; SELF_ALERT → escalation SID). */
+  /** Optional explicit template SID (defaults to per-language SID by action). */
   contentSid?: string | null;
+  /** Recipient language ("en" | "ms" | "zh-CN") — selects the per-language template SID. Defaults to English. */
+  language?: string | null;
   now?: Date;
 };
 
@@ -186,8 +201,9 @@ export async function dispatchWhatsAppMessage(
     return { status: "SKIPPED_QUOTA", reason: "quota-exhausted" };
   }
 
-  const contentSid =
-    input.contentSid ?? (input.action === "SELF_ALERT" ? TWILIO_CONTENT_SID_ESCALATION : TWILIO_CONTENT_SID);
+  const lang = templateLanguage(input.language);
+  const sids = input.action === "SELF_ALERT" ? CONTENT_SIDS_ESCALATION : CONTENT_SIDS;
+  const contentSid = input.contentSid ?? sids[lang] ?? null;
   const res = await sendWhatsAppMessage({
     to: input.phone,
     body: input.body,

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-export type SessionUser = { id: string; name: string; email: string; role: string };
+export type SessionUser = { id: string; name: string; email: string; role: string; language?: string };
 
 /**
  * Role-based visibility:
