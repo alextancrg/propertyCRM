@@ -26,6 +26,7 @@ export default async function RootLayout({
   return (
     <html lang={locale} className={inter.variable}>
       <head>
+        <meta name="facebook-domain-verification" content="xjrguvh9kocm9v7i53n38dohki8rk7" />
         <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossOrigin="anonymous" />
         <link
           rel="stylesheet"
