@@ -11,28 +11,25 @@ type Owner = {
   icNumber: string | null;
   phone: string | null;
   email: string | null;
-  createdAt: string;
+  // Formatted on the server to keep the SSR HTML identical to what React
+  // hydrates (Vercel renders in UTC, the browser in a different timezone).
+  registeredAt: string;
   createdBy: { id: string; name: string } | null;
   assignedManagers: { user: { id: string; name: string } }[];
   properties: { property: { id: string; name: string } }[];
 };
 
-type ManagerDTO = { id: string; name: string };
-
 export function OwnersClient({
   me,
   owners: initial,
-  managers,
 }: {
   me: { id: string; name: string; email: string; role: string };
   owners: Owner[];
-  managers: ManagerDTO[];
 }) {
   const router = useRouter();
   const [owners, setOwners] = useState<Owner[]>(initial);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Owner | null>(null);
-  const [assigning, setAssigning] = useState<Owner | null>(null);
   const [deleting, setDeleting] = useState<Owner | null>(null);
   const [form, setForm] = useState({ name: "", icNumber: "", phone: "", email: "" });
   const [error, setError] = useState<string | null>(null);
@@ -90,7 +87,7 @@ export function OwnersClient({
           icNumber: data.owner?.icNumber ?? null,
           phone: data.owner?.phone ?? null,
           email: data.owner?.email ?? null,
-          createdAt: data.owner?.createdAt ?? new Date().toISOString(),
+          registeredAt: formatDate(data.owner?.createdAt ?? new Date()),
           createdBy: { id: me.id, name: me.name },
           assignedManagers: [],
           properties: [],
@@ -189,9 +186,6 @@ export function OwnersClient({
                 <button onClick={() => openEdit(o)} className="btn-ghost !px-3 !py-1.5 text-xs">
                   <i className="fa-solid fa-pen" /> Update
                 </button>
-                <button onClick={() => setAssigning(o)} className="btn-ghost !px-3 !py-1.5 text-xs">
-                  <i className="fa-solid fa-user-gear" /> Assign managers
-                </button>
                 <button onClick={() => setDeleting(o)} className="btn-ghost !px-3 !py-1.5 text-xs text-red-600 hover:bg-red-50">
                   <i className="fa-solid fa-trash-can" /> Delete
                 </button>
@@ -211,7 +205,7 @@ export function OwnersClient({
                   ))}
                 </div>
               )}
-              <p className="mt-3 text-[11px] text-slate-400">Registered {formatDate(o.createdAt)}</p>
+              <p className="mt-3 text-[11px] text-slate-400">Registered {o.registeredAt}</p>
               {o.createdBy && (
                 <p className="mt-1 text-[11px] text-slate-400">Registered by {o.createdBy.name}</p>
               )}
@@ -230,25 +224,6 @@ export function OwnersClient({
         )}
       </div>
 
-      {assigning && (
-        <AssignManagersModal
-          owner={assigning}
-          managers={managers}
-          onClose={() => setAssigning(null)}
-          onSaved={(id, names) => {
-            setAssigning(null);
-            setOwners((prev) =>
-              prev.map((o) =>
-                o.id === id
-                  ? { ...o, assignedManagers: names.map((n) => ({ user: { id: "", name: n } })) }
-                  : o,
-              ),
-            );
-            router.refresh();
-          }}
-        />
-      )}
-
       {deleting && (
         <DeleteOwnerModal
           owner={deleting}
@@ -261,103 +236,6 @@ export function OwnersClient({
         />
       )}
     </div>
-  );
-}
-
-/** Modal to assign other property managers to manage an owner's properties. */
-function AssignManagersModal({
-  owner,
-  managers,
-  onClose,
-  onSaved,
-}: {
-  owner: Owner;
-  managers: ManagerDTO[];
-  onClose: () => void;
-  onSaved: (id: string, managerNames: string[]) => void;
-}) {
-  const [selected, setSelected] = useState<string[]>(() =>
-    owner.assignedManagers.map((m) => m.user.id),
-  );
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  function toggle(id: string) {
-    setSelected((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-  }
-
-  async function save() {
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/owners/${owner.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ managerIds: selected }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error ?? "Failed to save assignments.");
-      onSaved(
-        owner.id,
-        managers.filter((m) => selected.includes(m.id)).map((m) => m.name),
-      );
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save assignments.");
-      setSaving(false);
-    }
-  }
-
-  return createPortal(
-    <div className="fixed inset-0 z-50 grid place-items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
-      <div className="card w-full max-w-md">
-        <div className="border-b border-slate-100 bg-slate-50 px-6 py-4">
-          <h3 className="font-bold text-slate-900">
-            <i className="fa-solid fa-user-gear mr-2 text-primary" />
-            Assign managers — {owner.name}
-          </h3>
-          <p className="mt-1 text-xs text-slate-500">
-            Assigned managers can see and manage the properties owned by this owner.
-          </p>
-        </div>
-        <div className="grid max-h-[50vh] gap-2 overflow-y-auto p-6">
-          {managers.length === 0 && (
-            <p className="text-sm italic text-slate-400">No other property managers available.</p>
-          )}
-          {managers.map((m) => {
-            const checked = selected.includes(m.id);
-            return (
-              <label
-                key={m.id}
-                className="flex cursor-pointer items-center gap-3 rounded-xl border border-slate-200 p-3 transition hover:bg-slate-50"
-              >
-                <input
-                  type="checkbox"
-                  checked={checked}
-                  onChange={() => toggle(m.id)}
-                  className="h-4 w-4 accent-blue-600"
-                />
-                <div className="grid h-8 w-8 place-items-center rounded-full bg-slate-100 text-xs font-bold text-slate-600">
-                  {m.name.slice(0, 2).toUpperCase()}
-                </div>
-                <span className="text-sm font-semibold text-slate-800">{m.name}</span>
-              </label>
-            );
-          })}
-        </div>
-        {error && <p className="px-6 pb-2 text-sm font-medium text-red-500">{error}</p>}
-        <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
-          <button type="button" onClick={onClose} className="btn-ghost">
-            Cancel
-          </button>
-          <button type="button" onClick={save} disabled={saving} className="btn-primary">
-            {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : "Save assignments"}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
   );
 }
 
