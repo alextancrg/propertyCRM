@@ -253,7 +253,7 @@ function RentalRow({ payment, onOpen }: { payment: RentalPaymentDTO; onOpen: () 
         ) : null}
 
         <button onClick={onOpen} className={cx("rounded-lg px-3 py-1.5 text-xs font-bold transition", paid ? "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100" : "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600")}>
-          <i className={cx("fa-solid mr-1", paid ? "fa-pen" : "fa-check")} /> {paid ? "Edit" : "Default"}
+          <i className={cx("fa-solid mr-1", paid ? "fa-pen" : "fa-check")} /> {paid ? "Edit" : "Collect"}
         </button>
       </div>
     </div>
@@ -287,10 +287,11 @@ function RentalPaymentModal({
   onSaved: () => void;
 }) {
   const isPaid = payment.status === "PAID";
-  const [status, setStatus] = useState<"PAID" | "UNPAID">("PAID");
-  // The "Default" collection always starts from one month's rent
-  // (lease.monthlyRent) and can be edited here. When editing a month that was
-  // already collected, keep its recorded amount instead.
+  // How this month is recorded: "Pay" (rent received — slip required unless the
+  // Property Manager override is ticked), "Unpaid" (leave it unpaid), or
+  // "Default" (no rent received → amount saved as RM 0, no payment slip).
+  type CollectMode = "PAY" | "UNPAID" | "DEFAULT";
+  const [mode, setMode] = useState<CollectMode>("PAY");
   const [amount, setAmount] = useState<string>(() =>
     isPaid && payment.amount ? String(payment.amount) : String(lease.monthlyRent),
   );
@@ -300,18 +301,43 @@ function RentalPaymentModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const paying = mode === "PAY";
+  const defaulting = mode === "DEFAULT";
+  const sendStatus = paying ? "PAID" : "UNPAID";
+  const sendAmount = defaulting ? "0" : amount;
+
+  function changeMode(next: CollectMode) {
+    // "Default" means no rent was received, so the amount is fixed at RM 0.
+    if (next === "DEFAULT") {
+      setMode("DEFAULT");
+      setAmount("0");
+      return;
+    }
+    // Leaving "Default" (whose amount was forced to 0) restores the usual
+    // default amount so a fresh collection isn't left at RM 0.
+    if (mode === "DEFAULT" && (amount === "0" || amount === "")) {
+      setAmount(isPaid && payment.amount ? String(payment.amount) : String(lease.monthlyRent));
+    }
+    setMode(next);
+  }
+
   async function submit() {
     setSaving(true);
     setError(null);
+    if (paying && sendAmount.trim() === "") {
+      setError("Enter the rent amount received.");
+      setSaving(false);
+      return;
+    }
     const fd = new FormData();
-    fd.set("status", status);
-    if (amount) fd.set("amount", amount);
+    fd.set("status", sendStatus);
+    fd.set("amount", sendAmount.trim());
     fd.set("remarks", remarks);
     if (file) fd.set("file", file);
     if (override) fd.set("override", "true");
 
     // Payment slip mandatory when collecting — unless the PM confirms the override.
-    if (status === "PAID" && !file && !payment.receiptUrl && !override) {
+    if (paying && !file && !payment.receiptUrl && !override) {
       setError(
         "A payment slip is required to record this rent. Upload a PDF/image, or tick the Property Manager override confirmation.",
       );
@@ -343,22 +369,35 @@ function RentalPaymentModal({
         </div>
 
         <div className="grid gap-4 p-6">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className={cx("pill", status === "PAID" ? "bg-emerald-100 text-emerald-700" : "bg-orange-100 text-orange-700")}>
-              {status === "PAID" ? "Collect rent" : "Save as unpaid"}
-            </span>
-            <select value={status} onChange={(e) => setStatus(e.target.value as "PAID" | "UNPAID")} className="input cursor-pointer">
-              <option value="PAID">Paid</option>
-              <option value="UNPAID">Unpaid (draft)</option>
+          <div>
+            <label className="label mb-1">Record as</label>
+            <select value={mode} onChange={(e) => changeMode(e.target.value as CollectMode)} className="input cursor-pointer">
+              <option value="PAY">Pay</option>
+              <option value="UNPAID">Unpaid</option>
+              <option value="DEFAULT">Default</option>
             </select>
+            <p className="mt-1 text-xs text-slate-500">
+              {mode === "PAY"
+                ? "Rent received — enter the amount received and attach the payment slip (or tick the Property Manager override)."
+                : mode === "DEFAULT"
+                  ? "No rent received — the amount is set to RM 0 and no payment slip is needed."
+                  : "Save this month as unpaid."}
+            </p>
           </div>
 
           <div>
-            <label className="label mb-1">Amount (RM)</label>
-            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="input" placeholder="0.00" />
-            {!isPaid && (
+            <label className="label mb-1">Rent received (RM)</label>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              disabled={defaulting}
+              className="input disabled:bg-slate-100 disabled:text-slate-400"
+              placeholder="0.00"
+            />
+            {paying && (
               <p className="mt-1 text-xs text-slate-400">
-                Defaults to one month's rent ({formatMYR(lease.monthlyRent)}). You can enter a different amount.
+                The amount of rent received this month. Defaults to one month's rent ({formatMYR(lease.monthlyRent)}); you can enter a different amount.
               </p>
             )}
           </div>
@@ -370,7 +409,7 @@ function RentalPaymentModal({
             <textarea value={remarks} onChange={(e) => setRemarks(e.target.value.slice(0, 500))} rows={2} className="input resize-none" placeholder="Payment notes, reference, etc." />
           </div>
 
-          {status === "PAID" && (
+          {paying && (
             <>
               <div>
                 <label className="label mb-1">
@@ -404,7 +443,7 @@ function RentalPaymentModal({
         <div className="flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
           <button type="button" onClick={onClose} className="btn-ghost">Cancel</button>
           <button type="button" onClick={submit} disabled={saving} className="btn-primary">
-            {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : status === "PAID" ? "Confirm collection" : "Save"}
+            {saving ? <><i className="fa-solid fa-spinner fa-spin" /> Saving…</> : paying ? "Confirm collection" : "Save"}
           </button>
         </div>
       </div>
