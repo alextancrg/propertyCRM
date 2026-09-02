@@ -30,11 +30,11 @@ function isInGrace(payment: RentalPaymentDTO, now = new Date()): boolean {
 export function RentalsClient({ rentals }: { rentals: RentalCollectionItem[] }) {
   const router = useRouter();
   const [paying, setPaying] = useState<{ lease: RentalCollectionItem; payment: RentalPaymentDTO } | null>(null);
-  // When there are more than 4 properties, only the latest 3 are expanded by
-  // default; the rest are collapsed. Clicking a card header expands/collapses it.
-  const [collapsed, setCollapsed] = useState<Set<string>>(
-    () => (rentals.length > 4 ? new Set(rentals.slice(3).map((l) => l.id)) : new Set<string>()),
-  );
+  // Every property is expanded by default. Clicking a card header fully
+  // collapses/expands that property. Each open card shows up to its 3 newest
+  // rent records; "Show all months" reveals the rest for that lease.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [showAllMonths, setShowAllMonths] = useState<Set<string>>(new Set());
 
   function toggleCollapsed(id: string) {
     setCollapsed((prev) => {
@@ -45,19 +45,31 @@ export function RentalsClient({ rentals }: { rentals: RentalCollectionItem[] }) 
     });
   }
 
-  const overdue = rentals.reduce(
-    (sum, l) => sum + l.payments.filter((p) => p.status === "UNPAID" && isOverdue(p)).reduce((a, p) => a + p.amount, 0),
-    0,
-  );
-  const dueSoon = rentals.reduce(
-    (sum, l) => sum + l.payments.filter((p) => p.status === "UNPAID" && !isOverdue(p)).reduce((a, p) => a + p.amount, 0),
-    0,
-  );
+  function toggleShowAll(id: string) {
+    setShowAllMonths((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  const sumUnpaid = (pred: (p: RentalPaymentDTO) => boolean) =>
+    rentals.reduce(
+      (sum, l) =>
+        sum +
+        l.payments.filter((p) => p.status === "UNPAID" && pred(p)).reduce((a, p) => a + p.amount, 0),
+      0,
+    );
+  const overdue = sumUnpaid(isOverdue);
+  const inGrace = sumUnpaid(isInGrace);
+  // Not yet due (due date still in the future) — rent that is due this month
+  // but whose due date has not arrived is "upcoming", never "due".
+  const upcoming = sumUnpaid((p) => !isOverdue(p) && !isInGrace(p));
   const collected = rentals.reduce(
     (sum, l) => sum + l.payments.filter((p) => p.status === "PAID").reduce((a, p) => a + p.amount, 0),
     0,
   );
-  const unpaidCount = rentals.reduce((sum, l) => sum + l.payments.filter((p) => p.status === "UNPAID").length, 0);
 
   return (
     <div className="space-y-6">
@@ -74,14 +86,17 @@ export function RentalsClient({ rentals }: { rentals: RentalCollectionItem[] }) 
         <i className="fa-solid fa-circle-info mt-0.5 text-sky-500" />
         <span>
           Any rent payment is always applied to the <span className="font-bold">earliest unpaid month</span> first.
-          Months are shown <span className="font-bold">newest first</span>.
+          Months are listed <span className="font-bold">newest first</span>, and each property shows its{" "}
+          <span className="font-bold">latest 3 months</span> by default (click "Show all" to reveal more, or a
+          property header to collapse it).
         </span>
       </div>
 
       {/* Metrics */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <Metric icon="fa-triangle-exclamation" cls="bg-red-50 text-red-500" label="Overdue (RM)" value={formatMYR(overdue)} />
-        <Metric icon="fa-hourglass-half" cls="bg-amber-50 text-amber-500" label="Due / In grace (RM)" value={formatMYR(dueSoon)} />
+        <Metric icon="fa-hourglass-half" cls="bg-amber-50 text-amber-500" label="In grace (RM)" value={formatMYR(inGrace)} />
+        <Metric icon="fa-calendar-day" cls="bg-sky-50 text-sky-500" label="Upcoming (RM)" value={formatMYR(upcoming)} />
         <Metric icon="fa-hand-holding-dollar" cls="bg-emerald-50 text-emerald-500" label="Collected (RM)" value={formatMYR(collected)} />
       </div>
 
@@ -130,7 +145,7 @@ export function RentalsClient({ rentals }: { rentals: RentalCollectionItem[] }) 
                 ) : leaseInGrace.length ? (
                   <span className="pill bg-amber-100 text-amber-700"><i className="fa-solid fa-hourglass-half" /> {leaseInGrace.length} in grace</span>
                 ) : leaseUpcoming.length ? (
-                  <span className="pill bg-sky-100 text-sky-700"><i className="fa-solid fa-calendar-day" /> {leaseUpcoming.length} due</span>
+                  <span className="pill bg-sky-100 text-sky-700"><i className="fa-solid fa-calendar-day" /> {leaseUpcoming.length} upcoming</span>
                 ) : (
                   <span className="pill bg-emerald-100 text-emerald-700"><i className="fa-solid fa-check-circle" /> All Collected</span>
                 )}
@@ -146,15 +161,29 @@ export function RentalsClient({ rentals }: { rentals: RentalCollectionItem[] }) 
                 {lease.payments.length} rent month{lease.payments.length === 1 ? "" : "s"} — click the header to expand.
               </p>
             ) : (
-              <div className="divide-y divide-slate-100">
-                {lease.payments.map((payment) => (
-                  <RentalRow
-                    key={payment.id}
-                    payment={payment}
-                    onOpen={() => setPaying({ lease, payment })}
-                  />
-                ))}
-              </div>
+              <>
+                <div className="divide-y divide-slate-100">
+                  {(showAllMonths.has(lease.id) ? lease.payments : lease.payments.slice(0, 3)).map((payment) => (
+                    <RentalRow
+                      key={payment.id}
+                      payment={payment}
+                      onOpen={() => setPaying({ lease, payment })}
+                    />
+                  ))}
+                </div>
+                {lease.payments.length > 3 && (
+                  <button
+                    type="button"
+                    onClick={() => toggleShowAll(lease.id)}
+                    className="flex w-full items-center justify-center gap-2 border-t border-slate-100 bg-slate-50/60 px-6 py-2.5 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    <i className={cx("fa-solid", showAllMonths.has(lease.id) ? "fa-chevron-up" : "fa-chevron-down")} />
+                    {showAllMonths.has(lease.id)
+                      ? `Show latest 3 of ${lease.payments.length} months`
+                      : `Show all ${lease.payments.length} months`}
+                  </button>
+                )}
+              </>
             )}
           </div>
         );
@@ -180,7 +209,7 @@ function RentalRow({ payment, onOpen }: { payment: RentalPaymentDTO; onOpen: () 
   const overdue = isOverdue(payment);
   const inGrace = isInGrace(payment);
   return (
-    <div className={cx("flex flex-col gap-2 px-6 py-3 sm:flex-row sm:items-center sm:justify-between", paid ? "bg-emerald-50/20" : overdue ? "bg-red-50/20" : inGrace ? "bg-amber-50/20" : "bg-slate-50/40")}>
+    <div className={cx("flex flex-col gap-2 px-6 py-3 sm:flex-row sm:items-center sm:justify-between", paid ? "bg-emerald-50/20" : overdue ? "bg-red-50/20" : inGrace ? "bg-amber-50/20" : "bg-sky-50/30")}>
       <div className="flex-1">
         <p className="text-sm font-bold text-slate-800">
           {payment.label}
@@ -192,7 +221,6 @@ function RentalRow({ payment, onOpen }: { payment: RentalPaymentDTO; onOpen: () 
         </p>
         <p className="text-xs text-slate-500">
           {payment.remarks ? ` ${payment.remarks} ·` : ""} Due {formatDate(payment.dueDate)}
-          {!paid && inGrace && <span className="font-semibold text-amber-600"> · in grace</span>}
         </p>
       </div>
 
@@ -208,11 +236,11 @@ function RentalRow({ payment, onOpen }: { payment: RentalPaymentDTO; onOpen: () 
           </span>
         ) : inGrace ? (
           <span className="pill bg-amber-100 text-amber-700">
-            <i className="fa-solid fa-hourglass-half" /> Due · in grace
+            <i className="fa-solid fa-hourglass-half" /> In grace
           </span>
         ) : (
-          <span className="pill bg-slate-100 text-slate-600">
-            <i className="fa-solid fa-calendar-day" /> Due
+          <span className="pill bg-sky-100 text-sky-700">
+            <i className="fa-solid fa-calendar-day" /> Upcoming
           </span>
         )}
 
