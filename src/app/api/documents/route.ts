@@ -28,17 +28,20 @@ export async function POST(req: NextRequest) {
     openEnded || !leaseToRaw || !/^\d{4}-\d{2}-\d{2}/.test(leaseToRaw) ? null : new Date(leaseToRaw);
   const year = leaseFrom ? leaseFrom.getFullYear() : new Date().getFullYear();
   const file = form?.get("file");
+  const file2 = form?.get("file2"); // optional 2nd attachment (max 2 files per document)
 
   // Vercel serverless functions cap request bodies at 4.5 MB and reject larger
   // ones with 413 before this handler runs. Reject oversized files up front so
   // the user gets a clear reason instead of an opaque failure.
-  if (file instanceof File && file.size > DOC_MAX_BYTES) {
-    return NextResponse.json(
-      {
-        error: `File is ${formatBytes(file.size)} — the maximum upload size is ${DOC_MAX_BYTES_LABEL}. Please compress the PDF (e.g. re-export or re-scan at a lower resolution) and try again.`,
-      },
-      { status: 400 },
-    );
+  for (const f of [file, file2]) {
+    if (f instanceof File && f.size > DOC_MAX_BYTES) {
+      return NextResponse.json(
+        {
+          error: `File is ${formatBytes(f.size)} — the maximum upload size is ${DOC_MAX_BYTES_LABEL}. Please compress the PDF (e.g. re-export or re-scan at a lower resolution) and try again.`,
+        },
+        { status: 400 },
+      );
+    }
   }
 
   if (!title) {
@@ -65,12 +68,19 @@ export async function POST(req: NextRequest) {
   }
 
   // File bytes are persisted in the DB (base64) so documents download on any
-  // host — Vercel's serverless filesystem is ephemeral.
+  // host — Vercel's serverless filesystem is ephemeral. A document holds up to
+  // two attachments (`file` + optional `file2`).
   let fileData: string | null = null;
   let fileMime: string | null = null;
+  let fileData2: string | null = null;
+  let fileMime2: string | null = null;
   if (file instanceof File && file.size > 0) {
     fileData = Buffer.from(await file.arrayBuffer()).toString("base64");
     fileMime = file.type || "application/octet-stream";
+  }
+  if (file2 instanceof File && file2.size > 0) {
+    fileData2 = Buffer.from(await file2.arrayBuffer()).toString("base64");
+    fileMime2 = file2.type || "application/octet-stream";
   }
 
   const document = await prisma.document.create({
@@ -85,6 +95,8 @@ export async function POST(req: NextRequest) {
       leaseTo,
       fileData,
       fileMime,
+      fileData2,
+      fileMime2,
     },
   });
 

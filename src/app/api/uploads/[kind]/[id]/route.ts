@@ -31,7 +31,7 @@ function mimeExt(mime: string): string {
 }
 
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ kind: string; id: string }> },
 ) {
   const me = await getSessionUser();
@@ -77,7 +77,7 @@ export async function GET(
     fileName = `rent-slip-${payment.month}.${mimeExt(mime) || "pdf"}`;
   } else if (kind === "document") {
     const doc = await prisma.document.findUnique({ where: { id }, include: { property: true } });
-    if (!doc || !doc.fileData) {
+    if (!doc || (!doc.fileData && !doc.fileData2)) {
       return NextResponse.json({ error: "Not found." }, { status: 404 });
     }
     if (me.role !== "Administrator" && doc.propertyId) {
@@ -86,9 +86,24 @@ export async function GET(
         return NextResponse.json({ error: "Forbidden." }, { status: 403 });
       }
     }
-    data = doc.fileData;
-    mime = doc.fileMime ?? "application/octet-stream";
-    fileName = doc.title.includes(".") ? doc.title : `${doc.title}${mimeExt(mime)}`;
+    // ?slot=2 serves the optional 2nd attachment (a document holds up to 2 files).
+    const slot = req.nextUrl.searchParams.get("slot");
+    if (slot === "2") {
+      if (!doc.fileData2) {
+        return NextResponse.json({ error: "Not found." }, { status: 404 });
+      }
+      data = doc.fileData2;
+      mime = doc.fileMime2 ?? "application/octet-stream";
+      fileName = `${doc.title} (2)`;
+    } else {
+      if (!doc.fileData) {
+        return NextResponse.json({ error: "Not found." }, { status: 404 });
+      }
+      data = doc.fileData;
+      mime = doc.fileMime ?? "application/octet-stream";
+      fileName = doc.title;
+    }
+    fileName = fileName.includes(".") ? fileName : `${fileName}${mimeExt(mime)}`;
   } else {
     return NextResponse.json({ error: "Unknown file kind." }, { status: 404 });
   }

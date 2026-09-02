@@ -303,6 +303,8 @@ model Document {
   fileUrl    String?
   fileData   String?   // base64-encoded bytes persisted so documents download on any host
   fileMime   String?   // original MIME type of the document
+  fileData2  String?   // optional 2nd attachment (base64) — a document holds up to 2 files
+  fileMime2  String?   // original MIME type of the 2nd attachment
   isStamped  Boolean   @default(false)
   year       Int?      // lease start year — used for year filtering / grouping
   leaseFrom  DateTime? // lease start date (tenure) — drives the year search

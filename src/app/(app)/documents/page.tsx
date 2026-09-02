@@ -19,8 +19,11 @@ export default async function DocumentsPage() {
       include: { property: true, tenant: true },
       orderBy: { uploadedAt: "desc" },
     }),
+    // Properties carry their active lease (tenant + tenure) so the upload form
+    // auto-fills tenant / lease dates straight from Properties & Leases.
     prisma.property.findMany({
       where: { deletedAt: null, ...scope },
+      include: { leases: { where: { status: "ACTIVE" }, include: { tenant: true }, orderBy: { startDate: "desc" } } },
       orderBy: { name: "asc" },
     }),
     prisma.tenant.findMany({
@@ -42,6 +45,8 @@ export default async function DocumentsPage() {
         category: d.category,
         isStamped: d.isStamped,
         fileUrl: d.fileUrl,
+        // A document holds up to 2 attachments — the 2nd downloads via ?slot=2.
+        file2Url: d.fileData2 ? `/api/uploads/document/${d.id}?slot=2` : null,
         year: d.year ?? d.uploadedAt.getFullYear(),
         // Lease tenure drives the year search. Dates are serialized as
         // "YYYY-MM-DD" (date-only) to avoid timezone shifts.
@@ -53,7 +58,21 @@ export default async function DocumentsPage() {
         tenantId: d.tenantId,
         tenant: d.tenant?.name ?? null,
       }))}
-      properties={properties.map((p) => ({ id: p.id, name: p.name }))}
+      properties={properties.map((p) => {
+        const lease = p.leases[0] ?? null;
+        return {
+          id: p.id,
+          name: p.name,
+          activeLease: lease
+            ? {
+                tenantId: lease.tenantId,
+                tenantName: lease.tenant.name,
+                startDate: lease.startDate.toISOString().slice(0, 10),
+                endDate: lease.endDate ? lease.endDate.toISOString().slice(0, 10) : null,
+              }
+            : null,
+        };
+      })}
       tenants={tenants.map((t) => ({ id: t.id, name: t.name }))}
     />
   );

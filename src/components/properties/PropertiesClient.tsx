@@ -26,12 +26,9 @@ type PropertyDTO = {
   rent: number;
   remarks: string | null;
   isOwnStay: boolean;
-  unitName: string | null;
   unitTags: string | null;
   utilityDeposit: number;
   meterMode: string | null;
-  meterRate: number | null;
-  template: string | null;
   nextCheckInDate: string | null;
   rentStartDate: string | null;
   soldDate: string | null;
@@ -245,14 +242,10 @@ export function PropertiesClient({
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <th className="px-4 py-3">Property Name</th>
-                  <th className="px-4 py-3">Unit Name</th>
                   <th className="px-4 py-3">Unit Tags</th>
                   <th className="px-4 py-3 text-right">Rental Fee</th>
-                  <th className="px-4 py-3 text-right">Rental Dep.</th>
-                  <th className="px-4 py-3 text-right">Utility Dep.</th>
+                  <th className="px-4 py-3 text-right">Rental Deposit</th>
                   <th className="px-4 py-3">Def. Meter Mode</th>
-                  <th className="px-4 py-3 text-right">Meter Rate</th>
-                  <th className="px-4 py-3">Template</th>
                   <th className="px-4 py-3">Unit&apos;s Rental Status</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
@@ -295,10 +288,6 @@ export function PropertiesClient({
                           </div>
                         </div>
                       </td>
-                      {/* Unit Name */}
-                      <td className="px-4 py-3 align-top font-medium text-slate-700">
-                        {p.unitName || <span className="text-slate-300">—</span>}
-                      </td>
                       {/* Unit Tags */}
                       <td className="px-4 py-3 align-top">
                         {tags.length > 0 ? (
@@ -327,10 +316,6 @@ export function PropertiesClient({
                       <td className="px-4 py-3 text-right align-top text-slate-700">
                         {p.lease ? formatMYR(p.lease.deposit) : <span className="text-slate-300">—</span>}
                       </td>
-                      {/* Utility Deposit */}
-                      <td className="px-4 py-3 text-right align-top text-slate-700">
-                        {p.utilityDeposit ? formatMYR(p.utilityDeposit) : <span className="text-slate-300">—</span>}
-                      </td>
                       {/* Meter Mode */}
                       <td className="px-4 py-3 align-top">
                         {p.meterMode ? (
@@ -347,14 +332,6 @@ export function PropertiesClient({
                         ) : (
                           <span className="text-slate-300">—</span>
                         )}
-                      </td>
-                      {/* Meter Rate */}
-                      <td className="px-4 py-3 text-right align-top text-slate-700">
-                        {p.meterRate != null ? `RM ${p.meterRate}/kWh` : <span className="text-slate-300">—</span>}
-                      </td>
-                      {/* Template */}
-                      <td className="px-4 py-3 align-top text-slate-700">
-                        {p.template || <span className="text-slate-300">—</span>}
                       </td>
                       {/* Unit's Rental Status */}
                       <td className="px-4 py-3 align-top">
@@ -721,12 +698,9 @@ function PropertyFormModal({
   const [remarks, setRemarks] = useState(property?.remarks ?? "");
   const [isOwnStay, setIsOwnStay] = useState(property?.isOwnStay ?? false);
   const [soldDate, setSoldDate] = useState(property?.soldDate ? property.soldDate.slice(0, 10) : "");
-  const [unitName, setUnitName] = useState(property?.unitName ?? "");
   const [unitTags, setUnitTags] = useState(property?.unitTags ?? "");
   const [utilityDeposit, setUtilityDeposit] = useState(property ? String(property.utilityDeposit || "") : "");
   const [meterMode, setMeterMode] = useState(property?.meterMode ?? "");
-  const [meterRate, setMeterRate] = useState(property?.meterRate != null ? String(property.meterRate) : "");
-  const [template, setTemplate] = useState(property?.template ?? "");
   // Rent (RM) and Monthly rent (RM) stay in sync — entering one sets the other.
   const [rentAmount, setRentAmount] = useState<string>(() =>
     property ? String(property.rent || property.monthlyRent || "") : "",
@@ -798,12 +772,9 @@ function PropertyFormModal({
       rent: rentAmount === "" ? undefined : Number(rentAmount),
       remarks,
       isOwnStay,
-      unitName: unitName || null,
       unitTags: unitTags || null,
       utilityDeposit: utilityDeposit === "" ? 0 : Number(utilityDeposit),
       meterMode: meterMode || null,
-      meterRate: meterRate === "" ? null : Number(meterRate),
-      template: template || null,
       rentStartDate: fd.get("rentStartDate") || null,
       status,
       soldDate: status === "SOLD" ? soldDate || null : null,
@@ -869,76 +840,6 @@ function PropertyFormModal({
               className="input resize-none"
               placeholder="Notes about this unit, e.g. key handover, maintenance, tenancy quirks, etc."
             />
-          </div>
-
-          {/* Unit & meter details (shown in the Properties & Leases table) */}
-          <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50/40 p-4">
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Unit &amp; meter details</p>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div>
-                <label className="label mb-1">Unit name</label>
-                <input
-                  value={unitName}
-                  onChange={(e) => setUnitName(e.target.value)}
-                  className="input"
-                  placeholder="e.g. Room 1, Level 3"
-                />
-              </div>
-              <div>
-                <label className="label mb-1">
-                  Unit tags <span className="normal-case text-slate-400">(comma-separated)</span>
-                </label>
-                <input
-                  value={unitTags}
-                  onChange={(e) => setUnitTags(e.target.value.slice(0, PROPERTY_UNIT_TAGS_MAX))}
-                  className="input"
-                  placeholder="e.g. Female Only, Private Bathroom"
-                />
-              </div>
-              <div>
-                <label className="label mb-1">Utility deposit (RM)</label>
-                <input
-                  value={utilityDeposit}
-                  onChange={(e) => setUtilityDeposit(e.target.value)}
-                  type="number"
-                  min={0}
-                  className="input"
-                  placeholder="e.g. 400"
-                />
-              </div>
-              <div>
-                <label className="label mb-1">Default meter mode</label>
-                <select value={meterMode} onChange={(e) => setMeterMode(e.target.value)} className="input cursor-pointer">
-                  <option value="">— Not set —</option>
-                  {PROPERTY_METER_MODES.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label mb-1">Meter rate (RM/kWh)</label>
-                <input
-                  value={meterRate}
-                  onChange={(e) => setMeterRate(e.target.value)}
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  className="input"
-                  placeholder="e.g. 0.50"
-                />
-              </div>
-              <div>
-                <label className="label mb-1">Template</label>
-                <input
-                  value={template}
-                  onChange={(e) => setTemplate(e.target.value)}
-                  className="input"
-                  placeholder="e.g. Standard, Rental"
-                />
-              </div>
-            </div>
           </div>
 
           <div>
@@ -1085,7 +986,9 @@ function PropertyFormModal({
             </div>
           </div>
 
-          {/* Tenant & lease */}
+          {/* Tenant & lease (optional) — includes utility deposit, unit tags and
+              default meter mode (previously their own section). Rental deposit
+              and utility deposit are clearly distinguished. */}
           <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-4">
             <p className="mb-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Tenant & lease (optional)</p>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -1121,7 +1024,40 @@ function PropertyFormModal({
                 <label className="label mb-1">Monthly rent (RM)</label>
                 <input name="monthlyRent" type="number" value={rentAmount} onChange={(e) => setRentAmount(e.target.value)} className="input" />
               </div>
-              <Field label="Deposit (RM)" name="deposit" type="number" defaultValue={property?.lease ? String(property.lease.deposit) : undefined} />
+              <Field label="Rental deposit (RM)" name="deposit" type="number" defaultValue={property?.lease ? String(property.lease.deposit) : undefined} />
+              <div>
+                <label className="label mb-1">Utility deposit (RM)</label>
+                <input
+                  value={utilityDeposit}
+                  onChange={(e) => setUtilityDeposit(e.target.value)}
+                  type="number"
+                  min={0}
+                  className="input"
+                  placeholder="e.g. 400"
+                />
+              </div>
+              <div>
+                <label className="label mb-1">
+                  Unit tags <span className="normal-case text-slate-400">(comma-separated)</span>
+                </label>
+                <input
+                  value={unitTags}
+                  onChange={(e) => setUnitTags(e.target.value.slice(0, PROPERTY_UNIT_TAGS_MAX))}
+                  className="input"
+                  placeholder="e.g. Female Only, Private Bathroom"
+                />
+              </div>
+              <div>
+                <label className="label mb-1">Default meter mode</label>
+                <select value={meterMode} onChange={(e) => setMeterMode(e.target.value)} className="input cursor-pointer">
+                  <option value="">— Not set —</option>
+                  {PROPERTY_METER_MODES.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div>
                 <label className="label mb-1">Lease start date</label>
                 <input name="startDate" type="date" defaultValue={property?.lease?.startDate.slice(0, 10)} className="input cursor-pointer" />

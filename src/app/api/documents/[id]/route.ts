@@ -25,8 +25,15 @@ export async function PATCH(
   const form = await req.formData().catch(() => null);
   const title = form?.get("title")?.toString();
   const category = form?.get("category")?.toString();
-  const propertyId = form?.get("propertyId")?.toString() || null;
-  const tenantId = form?.get("tenantId")?.toString() || null;
+  // Only change the property/tenant links when the form actually sends them —
+  // so a partial update (e.g. adding the 2nd attachment only) never unlinks a
+  // document from its property/tenant.
+  const propertyId = form?.has("propertyId")
+    ? form.get("propertyId")?.toString() || null
+    : existing.propertyId;
+  const tenantId = form?.has("tenantId")
+    ? form.get("tenantId")?.toString() || null
+    : existing.tenantId;
   const isStampedRaw = form?.get("isStamped")?.toString();
 
   // Lease tenure (drives the year search). Open-ended = null end date.
@@ -76,6 +83,28 @@ export async function PATCH(
     fileMime = file.type || "application/octet-stream";
   }
 
+  // Optional 2nd attachment (a document holds up to 2 files). Send `file2` to
+  // add/replace it, or `clearFile2=true` to remove it.
+  let fileData2 = existing.fileData2;
+  let fileMime2 = existing.fileMime2;
+  const file2 = form?.get("file2");
+  const clearFile2 = form?.get("clearFile2") === "true";
+  if (file2 instanceof File && file2.size > DOC_MAX_BYTES) {
+    return NextResponse.json(
+      {
+        error: `File is ${formatBytes(file2.size)} — the maximum upload size is ${DOC_MAX_BYTES_LABEL}. Please compress the PDF (e.g. re-export or re-scan at a lower resolution) and try again.`,
+      },
+      { status: 400 },
+    );
+  }
+  if (file2 instanceof File && file2.size > 0) {
+    fileData2 = Buffer.from(await file2.arrayBuffer()).toString("base64");
+    fileMime2 = file2.type || "application/octet-stream";
+  } else if (clearFile2) {
+    fileData2 = null;
+    fileMime2 = null;
+  }
+
   const document = await prisma.document.update({
     where: { id },
     data: {
@@ -90,6 +119,8 @@ export async function PATCH(
       fileUrl: fileData ? `/api/uploads/document/${id}` : existing.fileUrl,
       fileData,
       fileMime,
+      fileData2,
+      fileMime2,
     },
   });
 

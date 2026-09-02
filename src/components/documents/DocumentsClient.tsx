@@ -12,6 +12,7 @@ type DocDTO = {
   category: string;
   isStamped: boolean;
   fileUrl: string | null;
+  file2Url: string | null; // 2nd attachment download link (?slot=2), null when absent
   year: number;
   leaseFrom: string | null; // "YYYY-MM-DD" — lease tenure start
   leaseTo: string | null; // "YYYY-MM-DD", or null = open-ended (until further notice)
@@ -20,6 +21,20 @@ type DocDTO = {
   property: string | null;
   tenantId: string | null;
   tenant: string | null;
+};
+
+/** The property's current active lease — reused from Properties & Leases. */
+type ActiveLease = {
+  tenantId: string;
+  tenantName: string;
+  startDate: string; // "YYYY-MM-DD"
+  endDate: string | null; // null = open-ended
+};
+
+type PropertyOption = {
+  id: string;
+  name: string;
+  activeLease: ActiveLease | null;
 };
 
 const CATEGORY_ICON: Record<string, { icon: string; cls: string }> = {
@@ -63,7 +78,7 @@ export function DocumentsClient({
   tenants,
 }: {
   documents: DocDTO[];
-  properties: { id: string; name: string }[];
+  properties: PropertyOption[];
   tenants: { id: string; name: string }[];
 }) {
   const router = useRouter();
@@ -270,17 +285,33 @@ export function DocumentsClient({
                         >
                           <i className="fa-solid fa-pen" /> Edit
                         </button>
-                        {d.fileUrl ? (
-                          <a
-                            href={d.fileUrl}
-                            download
-                            target="_blank"
-                            rel="noreferrer"
-                            className="btn-ghost !px-3 !py-1.5 text-xs"
-                            title="Click to download"
-                          >
-                            <i className="fa-solid fa-download" /> Download
-                          </a>
+                        {d.fileUrl || d.file2Url ? (
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {d.fileUrl ? (
+                              <a
+                                href={d.fileUrl}
+                                download
+                                target="_blank"
+                                rel="noreferrer"
+                                className="btn-ghost !px-3 !py-1.5 text-xs"
+                                title="Click to download"
+                              >
+                                <i className="fa-solid fa-download" /> Download
+                              </a>
+                            ) : null}
+                            {d.file2Url ? (
+                              <a
+                                href={d.file2Url}
+                                download
+                                target="_blank"
+                                rel="noreferrer"
+                                className="btn-ghost !px-3 !py-1.5 text-xs"
+                                title="Download the 2nd attachment"
+                              >
+                                <i className="fa-solid fa-paperclip" /> Attachment 2
+                              </a>
+                            ) : null}
+                          </div>
                         ) : (
                           <span className="rounded-lg border border-dashed border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-400">
                             No file
@@ -324,7 +355,7 @@ function UploadModal({
   onSaved,
 }: {
   doc: DocDTO | null;
-  properties: { id: string; name: string }[];
+  properties: PropertyOption[];
   tenants: { id: string; name: string }[];
   onClose: () => void;
   onSaved: () => void;
@@ -333,16 +364,62 @@ function UploadModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
-  // Open-ended = no end date (until further notice). Default for new docs is
-  // unchecked so the PM explicitly ticks it when the end date is unknown.
+  const [file2Error, setFile2Error] = useState<string | null>(null);
+  // Open-ended = no end date (until further notice).
   const [openEnded, setOpenEnded] = useState(doc ? doc.leaseTo === null : false);
+  // Tenant + lease dates are auto-filled from the chosen property's ACTIVE
+  // lease (the Properties & Leases section). Kept as controlled state.
+  const [propId, setPropId] = useState(doc?.propertyId ?? "");
+  const [tenantId, setTenantId] = useState(doc?.tenantId ?? "");
+  const [leaseFrom, setLeaseFrom] = useState(doc?.leaseFrom ?? "");
+  const [leaseTo, setLeaseTo] = useState(doc?.leaseTo ?? "");
+  // Editing a document that already has a 2nd attachment → option to remove it.
+  const [removeFile2, setRemoveFile2] = useState(false);
 
-  // Document bytes ride in a single POST body, and the host (Vercel) caps the
-  // request at 4.5 MB — reject oversized files up front with a clear message
-  // instead of letting the upload fail with an opaque error.
+  function applyProperty(p: PropertyOption | undefined) {
+    setPropId(p?.id ?? "");
+    if (p?.activeLease) {
+      setTenantId(p.activeLease.tenantId);
+      setLeaseFrom(p.activeLease.startDate);
+      setLeaseTo(p.activeLease.endDate ?? "");
+      setOpenEnded(p.activeLease.endDate === null);
+    } else {
+      setTenantId("");
+      setLeaseFrom("");
+      setLeaseTo("");
+      setOpenEnded(false);
+    }
+  }
+
+  // Document bytes ride in a single request body, and the host (Vercel) caps
+  // the request at 4.5 MB — reject oversized files up front with a clear
+  // message instead of letting the upload fail with an opaque error.
   function fileTooBig(f: File | undefined | null): string | null {
     if (!f || f.size <= DOC_MAX_BYTES) return null;
     return `“${f.name}” is ${formatBytes(f.size)} — the maximum upload size is ${DOC_MAX_BYTES_LABEL}. Please compress the file (e.g. re-scan at a lower resolution) and try again.`;
+  }
+
+  async function saveForm(url: string, method: string, body: FormData): Promise<Response> {
+    const res = await fetch(url, { method, body });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      let msg = "Could not save the document. Please try again.";
+      if (text) {
+        try {
+          const data = JSON.parse(text) as { error?: string };
+          msg = data.error || msg;
+        } catch {
+          // Non-JSON body (e.g. the host's 413 FUNCTION_PAYLOAD_TOO_LARGE).
+          if (res.status === 413 || /payload too large|request entity too large/i.test(text)) {
+            msg = `The file is too large to upload — the maximum is ${DOC_MAX_BYTES_LABEL}. Please compress the PDF and try again.`;
+          } else if (text.trim().length < 300) {
+            msg = text.trim();
+          }
+        }
+      }
+      throw new Error(msg);
+    }
+    return res;
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -350,39 +427,40 @@ function UploadModal({
     setSaving(true);
     setError(null);
     setFileError(null);
+    setFile2Error(null);
     try {
-      const fd = new FormData(e.currentTarget);
-      const chosen = fd.get("file");
-      if (chosen instanceof File && chosen.size > DOC_MAX_BYTES) {
-        const msg = fileTooBig(chosen);
-        setError(msg ?? "File is too large to upload.");
-        setSaving(false);
-        return;
-      }
-      if (openEnded) fd.set("leaseTo", "");
-      fd.set("openEnded", openEnded ? "true" : "false");
+      const formEl = e.currentTarget;
+      const file1 = (formEl.elements.namedItem("file") as HTMLInputElement | null)?.files?.[0];
+      const file2 = (formEl.elements.namedItem("file2") as HTMLInputElement | null)?.files?.[0];
+      if (file1 && file1.size > DOC_MAX_BYTES) throw new Error(fileTooBig(file1) ?? "File is too large to upload.");
+      if (file2 && file2.size > DOC_MAX_BYTES) throw new Error(fileTooBig(file2) ?? "File is too large to upload.");
+
+      // A document holds up to 2 attachments. The host caps a single request
+      // body at ~4.5 MB, so when a 2nd file is picked it is sent as its own
+      // follow-up request — each request stays safely under the body cap.
+      const main = new FormData(formEl);
+      main.delete("file2");
+      if (openEnded) main.set("leaseTo", "");
+      main.set("openEnded", openEnded ? "true" : "false");
       // Always send the stamp flag so it can be toggled off when editing.
-      fd.set("isStamped", fd.get("isStamped") === "true" ? "true" : "false");
+      main.set("isStamped", main.get("isStamped") === "true" ? "true" : "false");
+      if (removeFile2) main.set("clearFile2", "true");
+
       const url = isEdit ? `/api/documents/${doc!.id}` : "/api/documents";
-      const res = await fetch(url, { method: isEdit ? "PATCH" : "POST", body: fd });
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        let msg = "Could not save the document. Please try again.";
-        if (text) {
-          try {
-            const data = JSON.parse(text) as { error?: string };
-            msg = data.error || msg;
-          } catch {
-            // Non-JSON body (e.g. the host's 413 FUNCTION_PAYLOAD_TOO_LARGE) —
-            // map it to a human-readable size message.
-            if (res.status === 413 || /payload too large|request entity too large/i.test(text)) {
-              msg = `The file is too large to upload — the maximum is ${DOC_MAX_BYTES_LABEL}. Please compress the PDF and try again.`;
-            } else if (text.trim().length < 300) {
-              msg = text.trim();
-            }
-          }
-        }
-        throw new Error(msg);
+      const method = isEdit ? "PATCH" : "POST";
+      const res = await saveForm(url, method, main);
+      const saved = (await res.json().catch(() => ({}))) as { document?: { id?: string } };
+      const docId = isEdit ? doc!.id : saved.document?.id;
+
+      // Optional 2nd attachment — a separate PATCH so both files never share
+      // one (potentially too-large) request body.
+      if (file2 && docId) {
+        const second = new FormData(formEl);
+        second.delete("file");
+        if (openEnded) second.set("leaseTo", "");
+        second.set("openEnded", openEnded ? "true" : "false");
+        second.set("isStamped", main.get("isStamped") === "true" ? "true" : "false");
+        await saveForm(`/api/documents/${docId}`, "PATCH", second);
       }
       onSaved();
     } catch (err) {
@@ -421,16 +499,28 @@ function UploadModal({
             </div>
             <div>
               <label className="label mb-1">Property</label>
-              <select name="propertyId" className="input cursor-pointer" defaultValue={doc?.propertyId ?? ""}>
+              <select
+                name="propertyId"
+                value={propId}
+                onChange={(e) => {
+                  const chosen = e.target.value;
+                  setPropId(chosen);
+                  applyProperty(properties.find((p) => p.id === chosen));
+                }}
+                className="input cursor-pointer"
+              >
                 <option value="">— None —</option>
                 {properties.map((p) => (
                   <option key={p.id} value={p.id}>{p.name}</option>
                 ))}
               </select>
+              <p className="mt-1 text-[11px] text-slate-400">
+                Tenant &amp; lease dates fill in automatically from this property&apos;s active lease.
+              </p>
             </div>
             <div>
               <label className="label mb-1">Tenant</label>
-              <select name="tenantId" className="input cursor-pointer" defaultValue={doc?.tenantId ?? ""}>
+              <select name="tenantId" value={tenantId} onChange={(e) => setTenantId(e.target.value)} className="input cursor-pointer">
                 <option value="">— None —</option>
                 {tenants.map((t) => (
                   <option key={t.id} value={t.id}>{t.name}</option>
@@ -439,15 +529,16 @@ function UploadModal({
             </div>
             <div>
               <label className="label mb-1">Lease from date</label>
-              <input name="leaseFrom" type="date" defaultValue={doc?.leaseFrom ?? undefined} className="input cursor-pointer" />
+              <input name="leaseFrom" type="date" value={leaseFrom} onChange={(e) => setLeaseFrom(e.target.value)} className="input cursor-pointer" />
             </div>
             <div>
               <label className="label mb-1">Lease to date</label>
               <input
                 name="leaseTo"
                 type="date"
+                value={leaseTo}
                 disabled={openEnded}
-                defaultValue={doc?.leaseTo ?? undefined}
+                onChange={(e) => setLeaseTo(e.target.value)}
                 className="input cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
               />
               <label className="mt-2 flex cursor-pointer items-start gap-2 text-xs font-medium text-slate-600">
@@ -460,23 +551,54 @@ function UploadModal({
                 <span>Lease is infinite — until further notice (no end date)</span>
               </label>
             </div>
-            <div className="col-span-2">
-              <label className="label mb-1">{isEdit ? "Replace file (optional)" : "File"}</label>
-              <input
-                name="file"
-                type="file"
-                onChange={(e) => setFileError(fileTooBig(e.target.files?.[0]))}
-                className="input file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold"
-              />
-              <p className="mt-1 text-[11px] text-slate-400">
-                Maximum file size: {DOC_MAX_BYTES_LABEL}
-              </p>
-              {fileError && (
-                <p className="mt-1 flex items-start gap-1.5 text-xs font-medium text-red-600">
-                  <i className="fa-solid fa-triangle-exclamation mt-0.5" />
-                  {fileError}
-                </p>
+            <div className="col-span-2 space-y-3">
+              <div>
+                <label className="label mb-1">{isEdit ? "Attachment 1 (replace, optional)" : "Attachment 1"}</label>
+                <input
+                  name="file"
+                  type="file"
+                  onChange={(e) => setFileError(fileTooBig(e.target.files?.[0]))}
+                  className="input file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold"
+                />
+                {fileError && (
+                  <p className="mt-1 flex items-start gap-1.5 text-xs font-medium text-red-600">
+                    <i className="fa-solid fa-triangle-exclamation mt-0.5" />
+                    {fileError}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label className="label mb-1">Attachment 2 (optional)</label>
+                <input
+                  name="file2"
+                  type="file"
+                  onChange={(e) => {
+                    setFile2Error(fileTooBig(e.target.files?.[0]));
+                    if (e.target.files?.[0]) setRemoveFile2(false);
+                  }}
+                  className="input file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold"
+                />
+                {file2Error && (
+                  <p className="mt-1 flex items-start gap-1.5 text-xs font-medium text-red-600">
+                    <i className="fa-solid fa-triangle-exclamation mt-0.5" />
+                    {file2Error}
+                  </p>
+                )}
+              </div>
+              {isEdit && doc?.file2Url && !removeFile2 && (
+                <label className="flex cursor-pointer items-start gap-2 text-xs font-medium text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={removeFile2}
+                    onChange={(e) => setRemoveFile2(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                  />
+                  <span>Remove the existing 2nd attachment on save</span>
+                </label>
               )}
+              <p className="text-[11px] text-slate-400">
+                Up to 2 attachments per document · maximum file size per attachment: {DOC_MAX_BYTES_LABEL}
+              </p>
             </div>
           </div>
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
