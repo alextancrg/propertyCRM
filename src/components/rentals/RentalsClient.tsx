@@ -14,6 +14,19 @@ function isOverdue(payment: RentalPaymentDTO, now = new Date()): boolean {
   return now > graceEnd;
 }
 
+/**
+ * Unpaid and PAST the due date but still inside the grace window. Rent that is
+ * not yet due (due date still in the future) is NOT "in grace" — grace only
+ * begins once the due date has passed.
+ */
+function isInGrace(payment: RentalPaymentDTO, now = new Date()): boolean {
+  if (payment.status === "PAID") return false;
+  const due = new Date(payment.dueDate);
+  const graceEnd = new Date(due);
+  graceEnd.setDate(graceEnd.getDate() + RENT_GRACE_DAYS);
+  return now >= due && now <= graceEnd;
+}
+
 export function RentalsClient({ rentals }: { rentals: RentalCollectionItem[] }) {
   const router = useRouter();
   const [paying, setPaying] = useState<{ lease: RentalCollectionItem; payment: RentalPaymentDTO } | null>(null);
@@ -81,7 +94,10 @@ export function RentalsClient({ rentals }: { rentals: RentalCollectionItem[] }) 
 
       {rentals.map((lease) => {
         const leaseOverdue = lease.payments.filter((p) => p.status === "UNPAID" && isOverdue(p));
-        const leaseDue = lease.payments.filter((p) => p.status === "UNPAID" && !isOverdue(p));
+        const leaseInGrace = lease.payments.filter((p) => p.status === "UNPAID" && isInGrace(p));
+        const leaseUpcoming = lease.payments.filter(
+          (p) => p.status === "UNPAID" && !isOverdue(p) && !isInGrace(p),
+        );
         const isCollapsed = collapsed.has(lease.id);
         return (
           <div key={lease.id} className="card overflow-hidden">
@@ -91,12 +107,13 @@ export function RentalsClient({ rentals }: { rentals: RentalCollectionItem[] }) 
               className={cx(
                 "flex w-full flex-wrap items-center justify-between gap-3 border-b px-6 py-4 text-left transition hover:brightness-[0.98]",
                 leaseOverdue.length ? "bg-red-50/40 border-red-100"
-                  : leaseDue.length ? "bg-amber-50/40 border-amber-100"
+                  : leaseInGrace.length ? "bg-amber-50/40 border-amber-100"
+                  : leaseUpcoming.length ? "bg-sky-50/40 border-sky-100"
                   : "bg-emerald-50/40 border-emerald-100",
               )}
             >
               <div className="flex items-center gap-3">
-                <i className={cx("fa-solid fa-building text-xl", leaseOverdue.length ? "text-red-500" : leaseDue.length ? "text-amber-500" : "text-emerald-600")} />
+                <i className={cx("fa-solid fa-building text-xl", leaseOverdue.length ? "text-red-500" : leaseInGrace.length ? "text-amber-500" : leaseUpcoming.length ? "text-sky-600" : "text-emerald-600")} />
                 <div>
                   <div className="flex items-center gap-2">
                     <h4 className="font-bold text-slate-900">{lease.propertyName}</h4>
@@ -110,8 +127,10 @@ export function RentalsClient({ rentals }: { rentals: RentalCollectionItem[] }) 
               <div className="flex items-center gap-3">
                 {leaseOverdue.length ? (
                   <span className="pill bg-red-100 text-red-700"><i className="fa-solid fa-triangle-exclamation" /> {leaseOverdue.length} overdue</span>
-                ) : leaseDue.length ? (
-                  <span className="pill bg-amber-100 text-amber-700"><i className="fa-solid fa-hourglass-half" /> {leaseDue.length} in grace</span>
+                ) : leaseInGrace.length ? (
+                  <span className="pill bg-amber-100 text-amber-700"><i className="fa-solid fa-hourglass-half" /> {leaseInGrace.length} in grace</span>
+                ) : leaseUpcoming.length ? (
+                  <span className="pill bg-sky-100 text-sky-700"><i className="fa-solid fa-calendar-day" /> {leaseUpcoming.length} due</span>
                 ) : (
                   <span className="pill bg-emerald-100 text-emerald-700"><i className="fa-solid fa-check-circle" /> All Collected</span>
                 )}
@@ -159,8 +178,9 @@ export function RentalsClient({ rentals }: { rentals: RentalCollectionItem[] }) 
 function RentalRow({ payment, onOpen }: { payment: RentalPaymentDTO; onOpen: () => void }) {
   const paid = payment.status === "PAID";
   const overdue = isOverdue(payment);
+  const inGrace = isInGrace(payment);
   return (
-    <div className={cx("flex flex-col gap-2 px-6 py-3 sm:flex-row sm:items-center sm:justify-between", paid ? "bg-emerald-50/20" : overdue ? "bg-red-50/20" : "bg-slate-50/40")}>
+    <div className={cx("flex flex-col gap-2 px-6 py-3 sm:flex-row sm:items-center sm:justify-between", paid ? "bg-emerald-50/20" : overdue ? "bg-red-50/20" : inGrace ? "bg-amber-50/20" : "bg-slate-50/40")}>
       <div className="flex-1">
         <p className="text-sm font-bold text-slate-800">
           {payment.label}
@@ -172,7 +192,7 @@ function RentalRow({ payment, onOpen }: { payment: RentalPaymentDTO; onOpen: () 
         </p>
         <p className="text-xs text-slate-500">
           {payment.remarks ? ` ${payment.remarks} ·` : ""} Due {formatDate(payment.dueDate)}
-          {!paid && !overdue && <span className="font-semibold text-amber-600"> · in grace</span>}
+          {!paid && inGrace && <span className="font-semibold text-amber-600"> · in grace</span>}
         </p>
       </div>
 
@@ -186,9 +206,13 @@ function RentalRow({ payment, onOpen }: { payment: RentalPaymentDTO; onOpen: () 
           <span className="pill bg-red-100 text-red-700">
             <i className="fa-solid fa-triangle-exclamation" /> Overdue
           </span>
+        ) : inGrace ? (
+          <span className="pill bg-amber-100 text-amber-700">
+            <i className="fa-solid fa-hourglass-half" /> Due · in grace
+          </span>
         ) : (
           <span className="pill bg-slate-100 text-slate-600">
-            <i className="fa-solid fa-hourglass-half" /> Due
+            <i className="fa-solid fa-calendar-day" /> Due
           </span>
         )}
 

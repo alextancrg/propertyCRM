@@ -63,6 +63,43 @@ function leaseInYear(p: PropertyDTO, year: number): boolean {
   return startY <= year && year <= endY;
 }
 
+/**
+ * Lease-status bucket used by the status filter (matches the status column):
+ *  - "vacant" — no active lease on file
+ *  - "ended"  — lease has passed its end date (unit effectively empty / to re-let)
+ *  - "ending" — lease ends within LEASE_END_ORANGE_DAYS (2 months)
+ *  - "leased" — ongoing lease (incl. open-ended / notified checkout)
+ */
+function leaseFilterKey(p: PropertyDTO, now = new Date()): "vacant" | "ended" | "ending" | "leased" {
+  const l = p.lease;
+  if (!l) return "vacant";
+  if (l.checkoutNotified) return "leased";
+  const end = l.endDate ? new Date(l.endDate) : null;
+  if (end) {
+    const daysLeft = Math.ceil((end.getTime() - now.getTime()) / 86_400_000);
+    if (daysLeft < 0) return "ended";
+    if (daysLeft <= LEASE_END_ORANGE_DAYS) return "ending";
+  }
+  return "leased";
+}
+
+function matchesStatusFilter(p: PropertyDTO, filter: string, now = new Date()): boolean {
+  const k = leaseFilterKey(p, now);
+  switch (filter) {
+    case "all":
+      return true;
+    case "vacant":
+      // Vacant includes units whose lease has ended and need re-letting.
+      return k === "vacant" || k === "ended";
+    case "leased":
+      return k === "leased";
+    case "ending":
+      return k === "ending";
+    default:
+      return true;
+  }
+}
+
 type LeaseStatusView = {
   badge: { label: string; cls: string; icon: string };
   // Optional second line shown under the badge (e.g. "Est. Check In …" or a
@@ -144,6 +181,7 @@ export function PropertiesClient({
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<PropertyDTO | null>(null);
@@ -167,10 +205,11 @@ export function PropertiesClient({
     return properties.filter((p) => {
       const matchQ = !q || p.name.toLowerCase().includes(q) || p.location.toLowerCase().includes(q);
       const matchT = typeFilter === "All" || p.type === typeFilter;
+      const matchS = matchesStatusFilter(p, statusFilter);
       const matchY = yearFilter === "all" || leaseInYear(p, Number(yearFilter));
-      return matchQ && matchT && matchY;
+      return matchQ && matchT && matchS && matchY;
     });
-  }, [properties, query, typeFilter, yearFilter]);
+  }, [properties, query, typeFilter, statusFilter, yearFilter]);
 
   function openAdd() {
     setEditing(null);
@@ -228,6 +267,20 @@ export function PropertiesClient({
             {PROPERTY_TYPES.map((t) => (
               <option key={t}>{t}</option>
             ))}
+          </select>
+        </div>
+        <div className="relative md:w-64">
+          <i className="fa-solid fa-house-circle-check absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="input pl-9 cursor-pointer"
+            title="Filter by lease status — Leased, Vacant, or lease ending within 2 months"
+          >
+            <option value="all">All lease statuses</option>
+            <option value="leased">Leased</option>
+            <option value="vacant">Vacant</option>
+            <option value="ending">Lease ending (&lt; 2 months)</option>
           </select>
         </div>
       </div>

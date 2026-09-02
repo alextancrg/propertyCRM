@@ -5,7 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { visiblePropertyIds, visibleManagerIds } from "@/lib/access";
 import { getWhatsappUsage } from "@/lib/whatsapp";
 import { getTranslations } from "@/lib/i18n-server";
-import { dueDateForMonth } from "@/lib/rentals";
+import { dueDateForMonth, RENT_GRACE_DAYS } from "@/lib/rentals";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -76,9 +76,14 @@ export default async function DashboardPage() {
   // (null) still see the whole company's activity.
   const teamIds = await visibleManagerIds(me);
 
-  const [properties, unpaidRent, paidRent, unpaidBills, auditLogs, totalExpenses] = await Promise.all([
+  const [properties, unpaidRows, paidRent, unpaidBills, auditLogs, totalExpenses] = await Promise.all([
     prisma.property.count({ where: { deletedAt: null, ...propScope } }),
-    prisma.rentPayment.aggregate({ where: { status: BillStatus.UNPAID, ...rentScope }, _sum: { amount: true } }),
+    // Unpaid rent rows are fetched (not aggregated) so arrears can be computed
+    // from the per-month due date + grace window below.
+    prisma.rentPayment.findMany({
+      where: { status: BillStatus.UNPAID, ...rentScope },
+      select: { amount: true, month: true, lease: { select: { startDate: true } } },
+    }),
     prisma.rentPayment.aggregate({ where: { status: BillStatus.PAID, ...rentScope }, _sum: { amount: true } }),
     prisma.billPayment.count({
       where: { status: BillStatus.UNPAID, ...(propIds ? { bill: { propertyId: { in: propIds } } } : {}) },
@@ -105,7 +110,14 @@ export default async function DashboardPage() {
     _sum: { monthlyRent: true },
   });
 
-  const arrears = unpaidRent._sum.amount ?? 0;
+  // Rent arrears = UNPAID months now PAST the due date + grace window. Rent
+  // that is not yet due, or still inside its grace period, is not in arrears.
+  const arrears = unpaidRows.reduce((sum, rp) => {
+    const due = dueDateForMonth(rp.month, rp.lease.startDate);
+    const graceEnd = new Date(due);
+    graceEnd.setDate(graceEnd.getDate() + RENT_GRACE_DAYS);
+    return new Date() > graceEnd ? sum + rp.amount : sum;
+  }, 0);
   const collected = paidRent._sum.amount ?? 0;
 
   // WhatsApp AI agent — action feed + monthly message budget.
@@ -342,15 +354,26 @@ function Metric({ label, value, positive, negative }: { label: string; value: st
 }
 
 async function ArrearsList({ scope, t }: { scope: string[] | null; t: (key: string, vars?: Record<string, string | number>) => string }) {
-  const arrears = await prisma.rentPayment.findMany({
+  const recentUnpaid = await prisma.rentPayment.findMany({
     where: {
       status: BillStatus.UNPAID,
       ...(scope ? { lease: { propertyId: { in: scope } } } : {}),
     },
     include: { lease: { include: { tenant: true, property: true } } },
     orderBy: { amount: "desc" },
-    take: 5,
+    take: 30,
   });
+
+  // Only genuinely overdue rent counts as arrears — skip months that are not
+  // yet due or are still inside their grace period.
+  const arrears = recentUnpaid
+    .filter((a) => {
+      const due = dueDateForMonth(a.month, a.lease.startDate);
+      const graceEnd = new Date(due);
+      graceEnd.setDate(graceEnd.getDate() + RENT_GRACE_DAYS);
+      return new Date() > graceEnd;
+    })
+    .slice(0, 5);
 
   if (arrears.length === 0) {
     return <p className="text-sm text-slate-400">{t("dashboard.noOutstandingRent")}</p>;
