@@ -40,7 +40,6 @@ export default async function PropertiesPage() {
       isOwnStay: p.isOwnStay,
       unitTags: p.unitTags,
       utilityDeposit: p.utilityDeposit,
-      meterMode: p.meterMode,
       nextCheckInDate: p.nextCheckInDate?.toISOString() ?? null,
       rentStartDate: p.rentStartDate?.toISOString() ?? null,
       soldDate: p.soldDate?.toISOString() ?? null,

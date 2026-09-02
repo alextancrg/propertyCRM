@@ -127,9 +127,13 @@ export async function PATCH(
             : null
           : existing.remarks,
       unitName: typeof body.unitName === "string" ? body.unitName : existing.unitName,
+      // Empty / cleared unit tags → store null (a dash in the table), never the
+      // literal string "null" (String(null) === "null" was being persisted).
       unitTags:
         body.unitTags !== undefined
-          ? String(body.unitTags).slice(0, PROPERTY_UNIT_TAGS_MAX)
+          ? typeof body.unitTags === "string" && body.unitTags.trim()
+            ? body.unitTags.trim().slice(0, PROPERTY_UNIT_TAGS_MAX)
+            : null
           : existing.unitTags,
       utilityDeposit:
         body.utilityDeposit !== undefined ? Number(body.utilityDeposit) : existing.utilityDeposit,

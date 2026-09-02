@@ -32,3 +32,10 @@ export const LEASE_END_REMARKS_MAX = 300;
 // Window (in days) before a lease's end date during which the "coming to an
 // end" status actions (add remarks / tenant informed vacating) are surfaced.
 export const LEASE_END_NOTICE_DAYS = 90;
+
+// Lease-end urgency coloring on the Properties & Leases table (Unit's Rental
+// Status column): 1 month or less to expiry → red, 2 months or less → orange,
+// otherwise the default purple "Contract End" badge.
+export const LEASE_END_RED_DAYS = 30; // ~1 month or less → red
+// (2 months or less → orange is the 60-day band below the red threshold)
+export const LEASE_END_ORANGE_DAYS = 60;

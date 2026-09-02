@@ -8,10 +8,11 @@ import { cx, formatMYR, formatDate, initials } from "@/lib/format";
 import {
   PROPERTY_TYPES,
   PROPERTY_MAX_REMARKS,
-  PROPERTY_METER_MODES,
   PROPERTY_UNIT_TAGS_MAX,
   LEASE_END_REMARKS_MAX,
   LEASE_END_NOTICE_DAYS,
+  LEASE_END_RED_DAYS,
+  LEASE_END_ORANGE_DAYS,
 } from "@/lib/properties";
 import { normalizePhoneE164 } from "@/lib/phone";
 import { SUPPORTED_LOCALES } from "@/lib/translations";
@@ -28,7 +29,6 @@ type PropertyDTO = {
   isOwnStay: boolean;
   unitTags: string | null;
   utilityDeposit: number;
-  meterMode: string | null;
   nextCheckInDate: string | null;
   rentStartDate: string | null;
   soldDate: string | null;
@@ -111,10 +111,18 @@ function leaseStatusView(p: PropertyDTO, now = new Date()): LeaseStatusView {
     };
   }
   if (end) {
+    // Urgency colors: expiring within ~1 month → red, within ~2 months →
+    // orange, otherwise purple (default).
+    const endCls =
+      daysLeft <= LEASE_END_RED_DAYS
+        ? "bg-red-100 text-red-700 border-red-200"
+        : daysLeft <= LEASE_END_ORANGE_DAYS
+          ? "bg-orange-100 text-orange-700 border-orange-200"
+          : "bg-purple-100 text-purple-700 border-purple-200";
     return {
       badge: {
         label: endLabel ? `Contract End ${endLabel}` : "Contract End",
-        cls: "bg-purple-100 text-purple-700 border-purple-200",
+        cls: endCls,
         icon: "fa-calendar-day",
       },
       action: daysLeft <= LEASE_END_NOTICE_DAYS ? "Lease ending · add remarks / notify" : null,
@@ -245,7 +253,7 @@ export function PropertiesClient({
                   <th className="px-4 py-3">Unit Tags</th>
                   <th className="px-4 py-3 text-right">Rental Fee</th>
                   <th className="px-4 py-3 text-right">Rental Deposit</th>
-                  <th className="px-4 py-3">Def. Meter Mode</th>
+                  <th className="px-4 py-3 text-right">Utilities Deposit</th>
                   <th className="px-4 py-3">Unit&apos;s Rental Status</th>
                   <th className="px-4 py-3 text-right">Actions</th>
                 </tr>
@@ -253,7 +261,12 @@ export function PropertiesClient({
               <tbody>
                 {filtered.map((p) => {
                   const ls = leaseStatusView(p);
-                  const tags = p.unitTags ? p.unitTags.split(",").map((t) => t.trim()).filter(Boolean) : [];
+                  const tags = p.unitTags
+                    ? p.unitTags
+                        .split(",")
+                        .map((t) => t.trim())
+                        .filter((t) => t && t !== "null" && t !== "undefined")
+                    : [];
                   return (
                     <tr
                       key={p.id}
@@ -316,22 +329,9 @@ export function PropertiesClient({
                       <td className="px-4 py-3 text-right align-top text-slate-700">
                         {p.lease ? formatMYR(p.lease.deposit) : <span className="text-slate-300">—</span>}
                       </td>
-                      {/* Meter Mode */}
-                      <td className="px-4 py-3 align-top">
-                        {p.meterMode ? (
-                          <span
-                            className={cx(
-                              "inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                              p.meterMode === "Prepaid"
-                                ? "border-violet-100 bg-violet-50 text-violet-700"
-                                : "border-cyan-100 bg-cyan-50 text-cyan-700",
-                            )}
-                          >
-                            <i className="fa-solid fa-bolt text-[9px]" /> {p.meterMode}
-                          </span>
-                        ) : (
-                          <span className="text-slate-300">—</span>
-                        )}
+                      {/* Utilities Deposit */}
+                      <td className="px-4 py-3 text-right align-top text-slate-700">
+                        {p.utilityDeposit ? formatMYR(p.utilityDeposit) : <span className="text-slate-300">—</span>}
                       </td>
                       {/* Unit's Rental Status */}
                       <td className="px-4 py-3 align-top">
@@ -700,7 +700,6 @@ function PropertyFormModal({
   const [soldDate, setSoldDate] = useState(property?.soldDate ? property.soldDate.slice(0, 10) : "");
   const [unitTags, setUnitTags] = useState(property?.unitTags ?? "");
   const [utilityDeposit, setUtilityDeposit] = useState(property ? String(property.utilityDeposit || "") : "");
-  const [meterMode, setMeterMode] = useState(property?.meterMode ?? "");
   // Rent (RM) and Monthly rent (RM) stay in sync — entering one sets the other.
   const [rentAmount, setRentAmount] = useState<string>(() =>
     property ? String(property.rent || property.monthlyRent || "") : "",
@@ -774,7 +773,6 @@ function PropertyFormModal({
       isOwnStay,
       unitTags: unitTags || null,
       utilityDeposit: utilityDeposit === "" ? 0 : Number(utilityDeposit),
-      meterMode: meterMode || null,
       rentStartDate: fd.get("rentStartDate") || null,
       status,
       soldDate: status === "SOLD" ? soldDate || null : null,
@@ -1046,17 +1044,6 @@ function PropertyFormModal({
                   className="input"
                   placeholder="e.g. Female Only, Private Bathroom"
                 />
-              </div>
-              <div>
-                <label className="label mb-1">Default meter mode</label>
-                <select value={meterMode} onChange={(e) => setMeterMode(e.target.value)} className="input cursor-pointer">
-                  <option value="">— Not set —</option>
-                  {PROPERTY_METER_MODES.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
               </div>
               <div>
                 <label className="label mb-1">Lease start date</label>
