@@ -7,6 +7,7 @@ export type RentalPaymentDTO = {
   month: string; // "2026-08"
   label: string; // "Aug 2026"
   dueDate: string; // due date for this month, derived from the lease start day
+  graceDays: number; // this property's grace period (days) after the due date
   amount: number;
   status: string;
   paidAt: string | null;
@@ -165,6 +166,7 @@ export async function buildRentalCollection(
       month: p.month,
       label: monthLabel(p.month),
       dueDate: dueDateForMonth(p.month, lease.startDate).toISOString(),
+      graceDays: lease.property.rentGraceDays,
       amount: p.amount,
       status: p.status,
       paidAt: p.paidAt?.toISOString() ?? null,

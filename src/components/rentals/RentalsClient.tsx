@@ -6,24 +6,30 @@ import { useRouter } from "next/navigation";
 import { cx, formatMYR, formatDate } from "@/lib/format";
 import { RENT_GRACE_DAYS, type RentalCollectionItem, type RentalPaymentDTO } from "@/lib/rentals";
 
-/** An unpaid month is overdue only after the due date plus the grace period. */
+/**
+ * An unpaid month is overdue only after the due date plus the property's grace
+ * period. The grace period is set per property in Properties & Leases;
+ * RENT_GRACE_DAYS is just the fallback when a value is missing.
+ */
 function isOverdue(payment: RentalPaymentDTO, now = new Date()): boolean {
   if (payment.status === "PAID") return false;
+  const graceDays = payment.graceDays ?? RENT_GRACE_DAYS;
   const graceEnd = new Date(payment.dueDate);
-  graceEnd.setDate(graceEnd.getDate() + RENT_GRACE_DAYS);
+  graceEnd.setDate(graceEnd.getDate() + graceDays);
   return now > graceEnd;
 }
 
 /**
- * Unpaid and PAST the due date but still inside the grace window. Rent that is
- * not yet due (due date still in the future) is NOT "in grace" — grace only
- * begins once the due date has passed.
+ * Unpaid and PAST the due date but still inside the property's grace window.
+ * Rent that is not yet due (due date still in the future) is NOT "in grace" —
+ * grace only begins once the due date has passed.
  */
 function isInGrace(payment: RentalPaymentDTO, now = new Date()): boolean {
   if (payment.status === "PAID") return false;
   const due = new Date(payment.dueDate);
+  const graceDays = payment.graceDays ?? RENT_GRACE_DAYS;
   const graceEnd = new Date(due);
-  graceEnd.setDate(graceEnd.getDate() + RENT_GRACE_DAYS);
+  graceEnd.setDate(graceEnd.getDate() + graceDays);
   return now >= due && now <= graceEnd;
 }
 

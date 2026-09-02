@@ -82,7 +82,11 @@ export default async function DashboardPage() {
     // from the per-month due date + grace window below.
     prisma.rentPayment.findMany({
       where: { status: BillStatus.UNPAID, ...rentScope },
-      select: { amount: true, month: true, lease: { select: { startDate: true } } },
+      select: {
+        amount: true,
+        month: true,
+        lease: { select: { startDate: true, property: { select: { rentGraceDays: true } } } },
+      },
     }),
     prisma.rentPayment.aggregate({ where: { status: BillStatus.PAID, ...rentScope }, _sum: { amount: true } }),
     prisma.billPayment.count({
@@ -114,8 +118,9 @@ export default async function DashboardPage() {
   // that is not yet due, or still inside its grace period, is not in arrears.
   const arrears = unpaidRows.reduce((sum, rp) => {
     const due = dueDateForMonth(rp.month, rp.lease.startDate);
+    const graceDays = rp.lease.property?.rentGraceDays ?? RENT_GRACE_DAYS;
     const graceEnd = new Date(due);
-    graceEnd.setDate(graceEnd.getDate() + RENT_GRACE_DAYS);
+    graceEnd.setDate(graceEnd.getDate() + graceDays);
     return new Date() > graceEnd ? sum + rp.amount : sum;
   }, 0);
   const collected = paidRent._sum.amount ?? 0;
@@ -369,8 +374,9 @@ async function ArrearsList({ scope, t }: { scope: string[] | null; t: (key: stri
   const arrears = recentUnpaid
     .filter((a) => {
       const due = dueDateForMonth(a.month, a.lease.startDate);
+      const graceDays = a.lease.property?.rentGraceDays ?? RENT_GRACE_DAYS;
       const graceEnd = new Date(due);
-      graceEnd.setDate(graceEnd.getDate() + RENT_GRACE_DAYS);
+      graceEnd.setDate(graceEnd.getDate() + graceDays);
       return new Date() > graceEnd;
     })
     .slice(0, 5);

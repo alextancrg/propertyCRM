@@ -5,7 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { BillStatus, LeaseStatus, PropertyStatus } from "@prisma/client";
 import { generateBillCycles } from "@/lib/bills";
 import { resolveOwnerInput, validateOwners, type OwnerInput } from "@/lib/owners";
-import { PROPERTY_MAX_REMARKS, PROPERTY_UNIT_TAGS_MAX } from "@/lib/properties";
+import { PROPERTY_MAX_REMARKS, PROPERTY_UNIT_TAGS_MAX, sanitizeGraceDays } from "@/lib/properties";
 import { normalizePhoneE164 } from "@/lib/phone";
 
 export const dynamic = "force-dynamic";
@@ -117,6 +117,7 @@ export async function PATCH(
         body.rentStartDate !== undefined && body.rentStartDate
           ? new Date(body.rentStartDate)
           : existing.rentStartDate,
+      rentGraceDays: sanitizeGraceDays(body.rentGraceDays, existing.rentGraceDays),
       status: newStatus,
       soldDate,
       isOwnStay: typeof body.isOwnStay === "boolean" ? body.isOwnStay : existing.isOwnStay,

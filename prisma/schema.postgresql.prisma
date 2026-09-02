@@ -101,6 +101,7 @@ model Property {
   status        PropertyStatus  @default(VACANT)
   rent          Float           @default(0) // actual rent (not target)
   rentStartDate DateTime?       // first rent collection date (drives rent due reminders)
+  rentGraceDays Int             @default(7) // grace period (days) after rent is due before it becomes overdue
   soldDate      DateTime?       // recorded when the unit is sold
   deletedAt     DateTime?       // soft delete — keeps documents & older bills intact
   remarks       String?         // free text, up to 300 characters

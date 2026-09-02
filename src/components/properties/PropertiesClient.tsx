@@ -9,6 +9,7 @@ import {
   PROPERTY_TYPES,
   PROPERTY_MAX_REMARKS,
   PROPERTY_UNIT_TAGS_MAX,
+  PROPERTY_RENT_GRACE_DAYS_DEFAULT,
   LEASE_END_REMARKS_MAX,
   LEASE_END_NOTICE_DAYS,
   LEASE_END_RED_DAYS,
@@ -31,6 +32,7 @@ type PropertyDTO = {
   utilityDeposit: number;
   nextCheckInDate: string | null;
   rentStartDate: string | null;
+  rentGraceDays: number;
   soldDate: string | null;
   owners: { ownerId: string; name: string; phone: string | null; icNumber: string | null; sharePercent: number }[];
   tenant: { id: string; name: string; phone: string | null; language: string } | null;
@@ -816,6 +818,13 @@ function PropertyFormModal({
         : { ownerName: r.name, ownerPhone: r.phone || null, sharePercent: Number(r.share || 0) },
     );
 
+    // Grace period (days) after the rent due date before rent becomes overdue.
+    const graceRaw = fd.get("rentGraceDays");
+    const rentGraceDays =
+      graceRaw === null || graceRaw === ""
+        ? PROPERTY_RENT_GRACE_DAYS_DEFAULT
+        : Math.min(90, Math.max(0, Math.floor(Number(graceRaw)))) || PROPERTY_RENT_GRACE_DAYS_DEFAULT;
+
     const payload: Record<string, unknown> = {
       name: fd.get("name"),
       type: fd.get("type"),
@@ -827,6 +836,7 @@ function PropertyFormModal({
       unitTags: unitTags || null,
       utilityDeposit: utilityDeposit === "" ? 0 : Number(utilityDeposit),
       rentStartDate: fd.get("rentStartDate") || null,
+      rentGraceDays,
       status,
       soldDate: status === "SOLD" ? soldDate || null : null,
       owners: ownersPayload,
@@ -898,15 +908,6 @@ function PropertyFormModal({
             <input name="rent" type="number" value={rentAmount} onChange={(e) => setRentAmount(e.target.value)} className="input" placeholder="1500" />
           </div>
           <div>
-            <label className="label mb-1">Rent collection start date</label>
-            <input
-              name="rentStartDate"
-              type="date"
-              defaultValue={property?.rentStartDate ? property.rentStartDate.slice(0, 10) : undefined}
-              className="input cursor-pointer"
-            />
-          </div>
-          <div>
             <label className="label mb-1">Status</label>
             <select value={status} onChange={(e) => setStatus(e.target.value)} className="input cursor-pointer">
               {PROPERTY_STATUSES.map((s) => (
@@ -915,6 +916,33 @@ function PropertyFormModal({
                 </option>
               ))}
             </select>
+          </div>
+          <div className="sm:col-span-2">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="label mb-1">Rent collection start date</label>
+                <input
+                  name="rentStartDate"
+                  type="date"
+                  defaultValue={property?.rentStartDate ? property.rentStartDate.slice(0, 10) : undefined}
+                  className="input cursor-pointer"
+                />
+              </div>
+              <div>
+                <label className="label mb-1">Grace period (days)</label>
+                <input
+                  name="rentGraceDays"
+                  type="number"
+                  min={0}
+                  max={90}
+                  defaultValue={property ? String(property.rentGraceDays) : String(PROPERTY_RENT_GRACE_DAYS_DEFAULT)}
+                  className="input"
+                />
+                <p className="mt-1 text-xs text-slate-400">
+                  Days after the rent due date before unpaid rent is treated as overdue.
+                </p>
+              </div>
+            </div>
           </div>
           {status === "SOLD" && (
             <div>

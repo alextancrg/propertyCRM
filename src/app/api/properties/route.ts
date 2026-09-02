@@ -4,7 +4,7 @@ import { logAudit } from "@/lib/ai";
 import { getSessionUser } from "@/lib/auth";
 import { LeaseStatus, PropertyStatus } from "@prisma/client";
 import { validateOwners, resolveOwnerInput, type OwnerInput } from "@/lib/owners";
-import { PROPERTY_MAX_REMARKS, PROPERTY_UNIT_TAGS_MAX } from "@/lib/properties";
+import { PROPERTY_MAX_REMARKS, PROPERTY_UNIT_TAGS_MAX, sanitizeGraceDays } from "@/lib/properties";
 import { assertCanAddProperty } from "@/lib/billing";
 import { normalizePhoneE164 } from "@/lib/phone";
 
@@ -36,6 +36,7 @@ export async function POST(req: NextRequest) {
     location,
     rent,
     rentStartDate,
+    rentGraceDays,
     owners,
     remarks,
     isOwnStay,
@@ -80,6 +81,7 @@ export async function POST(req: NextRequest) {
       location: location ?? "",
       rent: rent ? Number(rent) : 0,
       rentStartDate: rentStartDate ? new Date(rentStartDate) : null,
+      rentGraceDays: sanitizeGraceDays(rentGraceDays),
       status: PropertyStatus.VACANT,
       remarks: remarks ? String(remarks).slice(0, PROPERTY_MAX_REMARKS) : null,
       isOwnStay: isOwnStay === true,

@@ -42,6 +42,7 @@ export default async function PropertiesPage() {
       utilityDeposit: p.utilityDeposit,
       nextCheckInDate: p.nextCheckInDate?.toISOString() ?? null,
       rentStartDate: p.rentStartDate?.toISOString() ?? null,
+      rentGraceDays: p.rentGraceDays,
       soldDate: p.soldDate?.toISOString() ?? null,
       owners: p.owners.map((o) => ({
         ownerId: o.ownerId,

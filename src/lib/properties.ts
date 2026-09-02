@@ -13,6 +13,25 @@ export const PROPERTY_TYPES = [
 
 export type PropertyType = (typeof PROPERTY_TYPES)[number];
 
+// Default grace period (in days) after a rent due date before an unpaid month
+// is treated as overdue. Configurable per property in Properties & Leases.
+// (Mirrors the historical global 7-day grace in src/lib/rentals.ts.)
+export const PROPERTY_RENT_GRACE_DAYS_DEFAULT = 7;
+
+/**
+ * Clamp a property's rent grace period to a sane 0–90 day range, falling back
+ * to the default (or the passed fallback) when the value is missing/invalid.
+ */
+export function sanitizeGraceDays(
+  value: unknown,
+  fallback: number = PROPERTY_RENT_GRACE_DAYS_DEFAULT,
+): number {
+  if (value === undefined || value === null || value === "") return fallback;
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(90, Math.max(0, n));
+}
+
 // Max length for the free-text remarks field on a property (shown on the card
 // and captured in the Add/Edit form).
 export const PROPERTY_MAX_REMARKS = 300;
