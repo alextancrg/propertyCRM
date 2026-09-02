@@ -225,7 +225,7 @@ function RentalRow({ payment, onOpen }: { payment: RentalPaymentDTO; onOpen: () 
         ) : null}
 
         <button onClick={onOpen} className={cx("rounded-lg px-3 py-1.5 text-xs font-bold transition", paid ? "border border-slate-200 bg-white text-slate-600 hover:bg-slate-100" : "bg-emerald-500 text-white shadow-sm hover:bg-emerald-600")}>
-          <i className={cx("fa-solid mr-1", paid ? "fa-pen" : "fa-check")} /> {paid ? "Edit" : "Collect"}
+          <i className={cx("fa-solid mr-1", paid ? "fa-pen" : "fa-check")} /> {paid ? "Edit" : "Default"}
         </button>
       </div>
     </div>
@@ -260,7 +260,12 @@ function RentalPaymentModal({
 }) {
   const isPaid = payment.status === "PAID";
   const [status, setStatus] = useState<"PAID" | "UNPAID">("PAID");
-  const [amount, setAmount] = useState<string>(payment.amount ? String(payment.amount) : String(lease.monthlyRent));
+  // The "Default" collection always starts from one month's rent
+  // (lease.monthlyRent) and can be edited here. When editing a month that was
+  // already collected, keep its recorded amount instead.
+  const [amount, setAmount] = useState<string>(() =>
+    isPaid && payment.amount ? String(payment.amount) : String(lease.monthlyRent),
+  );
   const [remarks, setRemarks] = useState(payment.remarks ?? "");
   const [file, setFile] = useState<File | null>(null);
   const [override, setOverride] = useState(false);
@@ -323,6 +328,11 @@ function RentalPaymentModal({
           <div>
             <label className="label mb-1">Amount (RM)</label>
             <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="input" placeholder="0.00" />
+            {!isPaid && (
+              <p className="mt-1 text-xs text-slate-400">
+                Defaults to one month's rent ({formatMYR(lease.monthlyRent)}). You can enter a different amount.
+              </p>
+            )}
           </div>
 
           <div>
