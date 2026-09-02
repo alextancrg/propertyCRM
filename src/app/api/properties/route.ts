@@ -4,7 +4,7 @@ import { logAudit } from "@/lib/ai";
 import { getSessionUser } from "@/lib/auth";
 import { LeaseStatus, PropertyStatus } from "@prisma/client";
 import { validateOwners, resolveOwnerInput, type OwnerInput } from "@/lib/owners";
-import { PROPERTY_MAX_REMARKS } from "@/lib/properties";
+import { PROPERTY_MAX_REMARKS, PROPERTY_UNIT_TAGS_MAX } from "@/lib/properties";
 import { assertCanAddProperty } from "@/lib/billing";
 import { normalizePhoneE164 } from "@/lib/phone";
 
@@ -29,7 +29,23 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json().catch(() => ({}));
-  const { name, type, address, location, rent, rentStartDate, owners, remarks, isOwnStay } = body;
+  const {
+    name,
+    type,
+    address,
+    location,
+    rent,
+    rentStartDate,
+    owners,
+    remarks,
+    isOwnStay,
+    unitName,
+    unitTags,
+    utilityDeposit,
+    meterMode,
+    meterRate,
+    template,
+  } = body;
 
   if (!name || !type) {
     return NextResponse.json({ error: "name and type are required." }, { status: 400 });
@@ -67,6 +83,12 @@ export async function POST(req: NextRequest) {
       status: PropertyStatus.VACANT,
       remarks: remarks ? String(remarks).slice(0, PROPERTY_MAX_REMARKS) : null,
       isOwnStay: isOwnStay === true,
+      unitName: typeof unitName === "string" && unitName ? unitName : null,
+      unitTags: typeof unitTags === "string" ? unitTags.slice(0, PROPERTY_UNIT_TAGS_MAX) : null,
+      utilityDeposit: utilityDeposit !== undefined ? Number(utilityDeposit || 0) : 0,
+      meterMode: typeof meterMode === "string" && meterMode ? meterMode : null,
+      meterRate: meterRate !== undefined && meterRate !== null && meterRate !== "" ? Number(meterRate) : null,
+      template: typeof template === "string" && template ? template : null,
       owners: {
         create: resolvedOwners.map((o) => ({
           ownerId: o.ownerId,

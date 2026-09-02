@@ -38,6 +38,13 @@ export default async function PropertiesPage() {
       rent: p.rent,
       remarks: p.remarks,
       isOwnStay: p.isOwnStay,
+      unitName: p.unitName,
+      unitTags: p.unitTags,
+      utilityDeposit: p.utilityDeposit,
+      meterMode: p.meterMode,
+      meterRate: p.meterRate,
+      template: p.template,
+      nextCheckInDate: p.nextCheckInDate?.toISOString() ?? null,
       rentStartDate: p.rentStartDate?.toISOString() ?? null,
       soldDate: p.soldDate?.toISOString() ?? null,
       owners: p.owners.map((o) => ({
@@ -60,6 +67,9 @@ export default async function PropertiesPage() {
             startDate: lease.startDate.toISOString(),
             endDate: lease.endDate?.toISOString() ?? null,
             stampingRef: lease.stampingRef,
+            checkoutNotified: lease.checkoutNotified,
+            checkoutDate: lease.checkoutDate?.toISOString() ?? null,
+            leaseEndRemarks: lease.leaseEndRemarks,
           }
         : null,
     };

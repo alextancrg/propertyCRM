@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { formatDate } from "@/lib/format";
 import { normalizePhoneE164 } from "@/lib/phone";
 import { SUPPORTED_LOCALES } from "@/lib/translations";
+import { MAX_SHARING_PARTNERS } from "@/lib/sharing";
 
 type Manager = {
   id: string;
@@ -48,6 +49,7 @@ export function ManagersClient({
 }) {
   const router = useRouter();
   const isAdmin = me.role === "Administrator";
+  const isAtSharingLimit = !isAdmin && sharing.length >= MAX_SHARING_PARTNERS;
   const [managers, setManagers] = useState<Manager[]>(initial);
   const [showRegister, setShowRegister] = useState(false);
   const [editing, setEditing] = useState<Manager | null>(null);
@@ -208,7 +210,7 @@ export function ManagersClient({
         </div>
         {!isAdmin && (
           <span className="pill bg-primary/10 text-primary">
-            <i className="fa-solid fa-share-nodes mr-1" /> Sharing with {sharing.length} manager{sharing.length === 1 ? "" : "s"}
+            <i className="fa-solid fa-share-nodes mr-1" /> Sharing with {sharing.length} of {MAX_SHARING_PARTNERS} managers
           </span>
         )}
       </div>
@@ -222,7 +224,8 @@ export function ManagersClient({
           <p className="mt-1 text-xs leading-relaxed text-slate-500">
             Invite another property manager by email to share property visibility. The invited manager must{" "}
             <span className="font-semibold text-slate-700">accept the invitation</span> — after that you both see each
-            other&apos;s properties and can share the workload. Sharing works with more than two managers.
+            other&apos;s properties and can share the workload. You can share with up to{" "}
+            <span className="font-semibold text-slate-700">{MAX_SHARING_PARTNERS} managers</span>.
           </p>
         </div>
         <form onSubmit={sendInvite} className="flex flex-col gap-3 sm:flex-row">
@@ -232,16 +235,23 @@ export function ManagersClient({
               type="email"
               value={inviteEmail}
               onChange={(e) => setInviteEmail(e.target.value)}
-              placeholder="manager@example.com"
-              className="input pl-11"
+              placeholder={isAtSharingLimit ? "Sharing limit reached" : "manager@example.com"}
+              className="input pl-11 disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={isAtSharingLimit}
               required
             />
           </div>
-          <button type="submit" disabled={inviting} className="btn-primary shrink-0">
+          <button type="submit" disabled={inviting || isAtSharingLimit} className="btn-primary shrink-0">
             {inviting ? <><i className="fa-solid fa-spinner fa-spin" /> Sending…</> : <><i className="fa-solid fa-paper-plane" /> Send invitation</>}
           </button>
         </form>
         {inviteError && <p className="mt-2 text-sm font-medium text-red-500">{inviteError}</p>}
+        {isAtSharingLimit && (
+          <p className="mt-2 flex items-center gap-1.5 text-xs font-medium text-amber-600">
+            <i className="fa-solid fa-circle-info" />
+            You&apos;ve reached the limit of {MAX_SHARING_PARTNERS} sharing partners.
+          </p>
+        )}
       </div>
 
       {/* Invitations */}

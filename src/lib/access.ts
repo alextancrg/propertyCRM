@@ -88,3 +88,26 @@ export async function visibleManagerIds(user: SessionUser): Promise<string[] | n
   if (user.role === "Administrator") return null;
   return sharingComponent(user.id);
 }
+
+/**
+ * A manager's direct sharing partners — the other user ids linked to them via
+ * a ManagerSharing row (bidirectional). Used to enforce the per-manager cap on
+ * how many property managers they can share/link with.
+ */
+export async function sharingPartnerIds(userId: string): Promise<string[]> {
+  const links = await prisma.managerSharing.findMany({
+    where: { OR: [{ userAId: userId }, { userBId: userId }] },
+    select: { userAId: true, userBId: true },
+  });
+  const ids = new Set<string>();
+  for (const link of links) {
+    if (link.userAId !== userId) ids.add(link.userAId);
+    if (link.userBId !== userId) ids.add(link.userBId);
+  }
+  return Array.from(ids);
+}
+
+/** Whether a user is a Property Manager and therefore subject to the sharing-partner cap. */
+export function isSharingCapUser(user: Pick<SessionUser, "role">): boolean {
+  return user.role === "Property Manager";
+}

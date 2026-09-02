@@ -5,7 +5,14 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { cx, formatMYR, formatDate, initials } from "@/lib/format";
-import { PROPERTY_TYPES, PROPERTY_MAX_REMARKS } from "@/lib/properties";
+import {
+  PROPERTY_TYPES,
+  PROPERTY_MAX_REMARKS,
+  PROPERTY_METER_MODES,
+  PROPERTY_UNIT_TAGS_MAX,
+  LEASE_END_REMARKS_MAX,
+  LEASE_END_NOTICE_DAYS,
+} from "@/lib/properties";
 import { normalizePhoneE164 } from "@/lib/phone";
 import { SUPPORTED_LOCALES } from "@/lib/translations";
 
@@ -19,6 +26,13 @@ type PropertyDTO = {
   rent: number;
   remarks: string | null;
   isOwnStay: boolean;
+  unitName: string | null;
+  unitTags: string | null;
+  utilityDeposit: number;
+  meterMode: string | null;
+  meterRate: number | null;
+  template: string | null;
+  nextCheckInDate: string | null;
   rentStartDate: string | null;
   soldDate: string | null;
   owners: { ownerId: string; name: string; phone: string | null; icNumber: string | null; sharePercent: number }[];
@@ -34,17 +48,13 @@ type PropertyDTO = {
     startDate: string;
     endDate: string | null;
     stampingRef: string | null;
+    checkoutNotified: boolean;
+    checkoutDate: string | null;
+    leaseEndRemarks: string | null;
   } | null;
 };
 
 type OwnerDTO = { id: string; name: string; phone: string | null };
-
-const STATUS: Record<string, { label: string; cls: string; icon: string }> = {
-  LEASED: { label: "Leased", cls: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: "fa-check-circle" },
-  ARREARS: { label: "Arrears", cls: "bg-red-100 text-red-700 border-red-200", icon: "fa-triangle-exclamation" },
-  VACANT: { label: "Vacant", cls: "bg-slate-100 text-slate-600 border-slate-200", icon: "fa-bed" },
-  SOLD: { label: "Sold", cls: "bg-slate-800 text-white border-slate-800", icon: "fa-handshake" },
-};
 
 const PROPERTY_STATUSES = ["VACANT", "LEASED", "ARREARS", "SOLD"];
 
@@ -54,6 +64,69 @@ function leaseInYear(p: PropertyDTO, year: number): boolean {
   const startY = new Date(l.startDate).getFullYear();
   const endY = l.endDate ? new Date(l.endDate).getFullYear() : Infinity;
   return startY <= year && year <= endY;
+}
+
+type LeaseStatusView = {
+  badge: { label: string; cls: string; icon: string };
+  // Optional second line shown under the badge (e.g. "Est. Check In …" or a
+  // hint that the lease is ending and can be managed).
+  action: string | null;
+};
+
+/**
+ * Derive the "Unit's Rental Status" cell for the Properties & Leases table.
+ * Mirrors the EasyRenz design: purple "Contract End <date>", amber
+ * "Notified Check Out <date>", and turquoise "Vacant". The status is a link
+ * when there is something to manage (lease ending, notified checkout, ended).
+ */
+function leaseStatusView(p: PropertyDTO, now = new Date()): LeaseStatusView {
+  const l = p.lease;
+  if (!l) {
+    return {
+      badge: { label: "Vacant", cls: "bg-cyan-50 text-cyan-700 border-cyan-200", icon: "fa-bed" },
+      action: null,
+    };
+  }
+  const end = l.endDate ? new Date(l.endDate) : null;
+  const endLabel = end ? formatDate(l.endDate!) : null;
+
+  if (l.checkoutNotified) {
+    const date = l.checkoutDate ? formatDate(l.checkoutDate) : endLabel;
+    return {
+      badge: {
+        label: date ? `Notified Check Out ${date}` : "Notified Check Out",
+        cls: "bg-amber-100 text-amber-700 border-amber-200",
+        icon: "fa-door-open",
+      },
+      action: p.nextCheckInDate ? `Est. Check In ${formatDate(p.nextCheckInDate)}` : "Edit notice",
+    };
+  }
+
+  const daysLeft = end ? Math.ceil((end.getTime() - now.getTime()) / 86_400_000) : Infinity;
+  if (end && daysLeft < 0) {
+    return {
+      badge: {
+        label: endLabel ? `Contract Ended ${endLabel}` : "Contract Ended",
+        cls: "bg-red-100 text-red-700 border-red-200",
+        icon: "fa-circle-exclamation",
+      },
+      action: "Lease ended · manage",
+    };
+  }
+  if (end) {
+    return {
+      badge: {
+        label: endLabel ? `Contract End ${endLabel}` : "Contract End",
+        cls: "bg-purple-100 text-purple-700 border-purple-200",
+        icon: "fa-calendar-day",
+      },
+      action: daysLeft <= LEASE_END_NOTICE_DAYS ? "Lease ending · add remarks / notify" : null,
+    };
+  }
+  return {
+    badge: { label: "Leased (Open)", cls: "bg-emerald-100 text-emerald-700 border-emerald-200", icon: "fa-check-circle" },
+    action: null,
+  };
 }
 
 export function PropertiesClient({
@@ -70,6 +143,7 @@ export function PropertiesClient({
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<PropertyDTO | null>(null);
   const [deleting, setDeleting] = useState<PropertyDTO | null>(null);
+  const [leaseEnd, setLeaseEnd] = useState<PropertyDTO | null>(null);
 
   // Years are derived from lease coverage plus the current year.
   const yearOptions = useMemo(() => {
@@ -107,8 +181,8 @@ export function PropertiesClient({
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h3 className="text-xl font-bold text-slate-900">Property Database</h3>
-          <p className="text-sm text-slate-500">Manage units, ownership, tenants, and lease compliance.</p>
+          <h3 className="text-xl font-bold text-slate-900">Properties &amp; Leases</h3>
+          <p className="text-sm text-slate-500">Manage units, ownership, tenancy, deposits, meter defaults, and lease-end status.</p>
         </div>
         <button onClick={openAdd} className="btn-primary self-start sm:self-auto">
           <i className="fa-solid fa-plus" /> Add New Unit
@@ -153,7 +227,7 @@ export function PropertiesClient({
         </div>
       </div>
 
-      {/* Grid */}
+      {/* Table */}
       {filtered.length === 0 ? (
         <div className="card p-12 text-center text-slate-500">
           <i className="fa-solid fa-building-circle-xmark mb-3 text-4xl text-slate-300" />
@@ -165,137 +239,173 @@ export function PropertiesClient({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((p) => {
-            const st = STATUS[p.status] ?? STATUS.VACANT;
-            return (
-              <div
-                key={p.id}
-                className={cx(
-                  "card relative flex flex-col overflow-hidden transition hover:shadow-lift",
-                  p.status === "ARREARS" && "border-red-200",
-                )}
-              >
-                {p.status === "ARREARS" && <div className="absolute inset-x-0 top-0 h-1 bg-red-500" />}
-                <div className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className="text-lg font-bold text-slate-900">{p.name}</h4>
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600">
-                          {p.type}
-                        </span>
-                        {p.isOwnStay && (
-                          <span className="rounded bg-violet-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-violet-700">
-                            <i className="fa-solid fa-house-user mr-0.5" /> Own Stay
-                          </span>
+        <div className="card overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1150px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="px-4 py-3">Property Name</th>
+                  <th className="px-4 py-3">Unit Name</th>
+                  <th className="px-4 py-3">Unit Tags</th>
+                  <th className="px-4 py-3 text-right">Rental Fee</th>
+                  <th className="px-4 py-3 text-right">Rental Dep.</th>
+                  <th className="px-4 py-3 text-right">Utility Dep.</th>
+                  <th className="px-4 py-3">Def. Meter Mode</th>
+                  <th className="px-4 py-3 text-right">Meter Rate</th>
+                  <th className="px-4 py-3">Template</th>
+                  <th className="px-4 py-3">Unit&apos;s Rental Status</th>
+                  <th className="px-4 py-3 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((p) => {
+                  const ls = leaseStatusView(p);
+                  const tags = p.unitTags ? p.unitTags.split(",").map((t) => t.trim()).filter(Boolean) : [];
+                  return (
+                    <tr
+                      key={p.id}
+                      className={cx(
+                        "border-b border-slate-100 odd:bg-white even:bg-slate-50/60 transition hover:bg-blue-50/40",
+                        p.status === "ARREARS" && "bg-red-50/40",
+                      )}
+                    >
+                      {/* Property Name */}
+                      <td className="px-4 py-3 align-top">
+                        <div className="flex items-center gap-2.5">
+                          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-blue-100 text-blue-700">
+                            <i className="fa-solid fa-building text-sm" />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-slate-900">{p.name}</p>
+                            <p className="truncate text-[11px] text-slate-500">
+                              <span className="font-semibold uppercase text-slate-600">{p.type}</span>
+                              {p.location && (
+                                <>
+                                  {" "}
+                                  · <i className="fa-solid fa-location-dot mr-0.5" />
+                                  {p.location}
+                                </>
+                              )}
+                              {p.isOwnStay && (
+                                <span className="ml-1.5 rounded bg-violet-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-violet-700">
+                                  Own Stay
+                                </span>
+                              )}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      {/* Unit Name */}
+                      <td className="px-4 py-3 align-top font-medium text-slate-700">
+                        {p.unitName || <span className="text-slate-300">—</span>}
+                      </td>
+                      {/* Unit Tags */}
+                      <td className="px-4 py-3 align-top">
+                        {tags.length > 0 ? (
+                          <div className="flex max-w-[170px] flex-wrap gap-1">
+                            {tags.slice(0, 3).map((t) => (
+                              <span
+                                key={t}
+                                className="rounded-full border border-pink-100 bg-pink-50 px-2 py-0.5 text-[10px] font-semibold text-pink-700"
+                              >
+                                {t}
+                              </span>
+                            ))}
+                            {tags.length > 3 && (
+                              <span className="text-[10px] font-semibold text-slate-400">+{tags.length - 3}</span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-300">—</span>
                         )}
-                        <span className="text-xs text-slate-500">
-                          <i className="fa-solid fa-location-dot mr-1" />
-                          {p.location}
-                        </span>
-                      </div>
-                    </div>
-                    <span className={cx("pill border", st.cls)}>
-                      <i className={`fa-solid ${st.icon} text-[10px]`} /> {st.label}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 space-y-3">
-                    <InfoBlock label="Ownership">
-                      {p.owners.map((o) => (
-                        <div key={o.ownerId ?? o.name} className="flex items-center justify-between py-1">
-                          <div className="flex items-center gap-2">
-                            <div className="grid h-7 w-7 place-items-center rounded bg-blue-100 text-[10px] font-bold text-blue-700">
-                              {initials(o.name)}
-                            </div>
-                            <div>
-                              <p className="text-xs font-semibold">{o.name}</p>
-                              {o.phone && <p className="text-[11px] text-slate-500">{o.phone}</p>}
-                            </div>
-                          </div>
-                          <span className="text-xs font-bold text-blue-700">{o.sharePercent}%</span>
-                        </div>
-                      ))}
-                      {p.owners.length === 0 && <p className="text-xs italic text-slate-400">No owners recorded</p>}
-                    </InfoBlock>
-
-                    <InfoBlock label="Current Tenant">
-                      {p.tenant ? (
-                        <div className="flex items-center gap-2">
-                          <div className="grid h-7 w-7 place-items-center rounded bg-purple-100 text-[10px] font-bold text-purple-700">
-                            {initials(p.tenant.name)}
-                          </div>
-                          <div>
-                            <p className="text-xs font-semibold">{p.tenant.name}</p>
-                            {p.tenant.phone && <p className="text-[11px] text-slate-500">{p.tenant.phone}</p>}
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="text-xs italic text-slate-400">No active tenant</p>
-                      )}
-                    </InfoBlock>
-
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="font-medium text-slate-500">
-                          {p.status === "VACANT" ? "Rent" : "Monthly rent"}
-                        </span>
-                        <span className="font-bold text-slate-900">{formatMYR(p.monthlyRent ?? p.rent)}</span>
-                      </div>
-                      {p.lease && (
-                        <div className="flex items-center justify-between text-xs text-slate-500">
-                          <span>Tenancy period</span>
-                          <span className="font-semibold text-slate-600">
-                            {formatDate(p.lease.startDate)} – {p.lease.endDate ? formatDate(p.lease.endDate) : "Open"}
+                      </td>
+                      {/* Rental Fee */}
+                      <td className="px-4 py-3 text-right align-top font-bold text-slate-900">
+                        {formatMYR(p.monthlyRent ?? p.rent)}
+                      </td>
+                      {/* Rental Deposit */}
+                      <td className="px-4 py-3 text-right align-top text-slate-700">
+                        {p.lease ? formatMYR(p.lease.deposit) : <span className="text-slate-300">—</span>}
+                      </td>
+                      {/* Utility Deposit */}
+                      <td className="px-4 py-3 text-right align-top text-slate-700">
+                        {p.utilityDeposit ? formatMYR(p.utilityDeposit) : <span className="text-slate-300">—</span>}
+                      </td>
+                      {/* Meter Mode */}
+                      <td className="px-4 py-3 align-top">
+                        {p.meterMode ? (
+                          <span
+                            className={cx(
+                              "inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                              p.meterMode === "Prepaid"
+                                ? "border-violet-100 bg-violet-50 text-violet-700"
+                                : "border-cyan-100 bg-cyan-50 text-cyan-700",
+                            )}
+                          >
+                            <i className="fa-solid fa-bolt text-[9px]" /> {p.meterMode}
                           </span>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                      {/* Meter Rate */}
+                      <td className="px-4 py-3 text-right align-top text-slate-700">
+                        {p.meterRate != null ? `RM ${p.meterRate}/kWh` : <span className="text-slate-300">—</span>}
+                      </td>
+                      {/* Template */}
+                      <td className="px-4 py-3 align-top text-slate-700">
+                        {p.template || <span className="text-slate-300">—</span>}
+                      </td>
+                      {/* Unit's Rental Status */}
+                      <td className="px-4 py-3 align-top">
+                        <button
+                          type="button"
+                          onClick={() => setLeaseEnd(p)}
+                          className={cx("group max-w-[215px] text-left", !ls.action && "cursor-default")}
+                          title={ls.action ? "Manage lease-end status" : undefined}
+                        >
+                          <span className={cx("pill border", ls.badge.cls)}>
+                            <i className={`fa-solid ${ls.badge.icon} text-[10px]`} /> {ls.badge.label}
+                          </span>
+                          {ls.action && (
+                            <span className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-primary underline-offset-2 group-hover:underline">
+                              <i className="fa-solid fa-circle-plus text-[10px]" /> {ls.action}
+                            </span>
+                          )}
+                        </button>
+                      </td>
+                      {/* Actions */}
+                      <td className="px-4 py-3 align-top">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => openEdit(p)}
+                            title="Edit property"
+                            className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                          >
+                            <i className="fa-solid fa-pen text-sm" />
+                          </button>
+                          <Link
+                            href="/documents"
+                            title="Documents"
+                            className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                          >
+                            <i className="fa-solid fa-folder-open text-sm" />
+                          </Link>
+                          <button
+                            onClick={() => setDeleting(p)}
+                            title="Delete property"
+                            className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-red-50 hover:text-red-600"
+                          >
+                            <i className="fa-solid fa-trash-can text-sm" />
+                          </button>
                         </div>
-                      )}
-                      {p.rentStartDate && (
-                        <div className="flex items-center justify-between text-xs text-slate-500">
-                          <span>Rent collection start</span>
-                          <span className="font-semibold text-slate-600">{formatDate(p.rentStartDate)}</span>
-                        </div>
-                      )}
-                      {p.soldDate && (
-                        <div className="flex items-center justify-between text-xs text-slate-500">
-                          <span>Sold date</span>
-                          <span className="font-semibold text-slate-600">{formatDate(p.soldDate)}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {p.remarks && (
-                    <InfoBlock label="Remarks">
-                      <p className="text-xs leading-relaxed text-slate-600">{p.remarks}</p>
-                    </InfoBlock>
-                  )}
-                </div>
-
-                <div className="mt-auto grid grid-cols-3 gap-2 border-t border-slate-100 bg-slate-50/60 p-4">
-                  <button
-                    onClick={() => openEdit(p)}
-                    className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
-                  >
-                    <i className="fa-solid fa-pen mr-1" /> Edit
-                  </button>
-                  <Link
-                    href="/documents"
-                    className="rounded-lg border border-slate-200 bg-white px-2 py-2 text-center text-xs font-semibold text-slate-600 transition hover:bg-slate-100"
-                  >
-                    <i className="fa-solid fa-folder-open mr-1" /> Docs
-                  </Link>
-                  <button
-                    onClick={() => setDeleting(p)}
-                    className="rounded-lg border border-red-200 bg-white px-2 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50"
-                  >
-                    <i className="fa-solid fa-trash-can mr-1" /> Delete
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -328,6 +438,17 @@ export function PropertiesClient({
               throw new Error(data?.error ?? "Failed to delete property.");
             }
             setDeleting(null);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {leaseEnd && (
+        <LeaseEndModal
+          property={leaseEnd}
+          onClose={() => setLeaseEnd(null)}
+          onSaved={() => {
+            setLeaseEnd(null);
             router.refresh();
           }}
         />
@@ -407,12 +528,164 @@ function DeleteConfirmModal({
   );
 }
 
-function InfoBlock({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="rounded-xl border border-slate-100 bg-slate-50/60 p-3">
-      <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-400">{label}</p>
-      {children}
-    </div>
+/**
+ * Lease-end status modal. Opened from the "Unit's Rental Status" cell of the
+ * Properties & Leases table. Lets the manager:
+ *  - attach lease-end remarks (e.g. reason for leaving, handover notes), and
+ *  - mark that the tenant has informed they are vacating at lease expiry
+ *    ("Notified Check Out"), with an optional check-out date and estimated
+ *    next check-in date for the unit.
+ */
+function LeaseEndModal({
+  property,
+  onClose,
+  onSaved,
+}: {
+  property: PropertyDTO;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const lease = property.lease;
+  const [checkoutNotified, setCheckoutNotified] = useState(lease?.checkoutNotified ?? false);
+  const [checkoutDate, setCheckoutDate] = useState(
+    lease?.checkoutDate ? lease.checkoutDate.slice(0, 10) : lease?.endDate ? lease.endDate.slice(0, 10) : "",
+  );
+  const [nextCheckIn, setNextCheckIn] = useState(property.nextCheckInDate ? property.nextCheckInDate.slice(0, 10) : "");
+  const [remarks, setRemarks] = useState(lease?.leaseEndRemarks ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!lease) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/leases/${lease.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          checkoutNotified,
+          checkoutDate: checkoutNotified && checkoutDate ? checkoutDate : null,
+          nextCheckInDate: nextCheckIn || null,
+          leaseEndRemarks: remarks || null,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error ?? "Failed to save lease-end status.");
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 grid place-items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
+      <form onSubmit={submit} className="card w-full max-w-lg">
+        <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
+          <h3 className="font-bold text-slate-900">
+            <i className="fa-solid fa-door-open mr-2 text-primary" /> Lease-End Status — {property.name}
+          </h3>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700">
+            <i className="fa-solid fa-xmark text-xl" />
+          </button>
+        </div>
+
+        <div className="grid gap-4 p-6">
+          {!lease ? (
+            <p className="text-sm text-slate-500">This unit has no active lease, so there is no lease-end status to manage.</p>
+          ) : (
+            <>
+              <p className="text-sm text-slate-500">
+                Tenant: <span className="font-semibold text-slate-700">{lease.tenantName}</span> · Tenancy{" "}
+                {formatDate(lease.startDate)} – {lease.endDate ? formatDate(lease.endDate) : "Open"}
+                {lease.tenantPhone && (
+                  <>
+                    {" "}
+                    · <span className="text-slate-400">{lease.tenantPhone}</span>
+                  </>
+                )}
+              </p>
+
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-200 bg-amber-50/40 p-3">
+                <input
+                  type="checkbox"
+                  checked={checkoutNotified}
+                  onChange={(e) => setCheckoutNotified(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                />
+                <span className="text-xs text-slate-600">
+                  <span className="font-bold text-slate-800">
+                    Tenant has informed — vacating unit at lease expiry
+                  </span>
+                  <br />
+                  Marks the status as &quot;Notified Check Out&quot; so you can plan the handover and next tenancy.
+                </span>
+              </label>
+
+              {checkoutNotified && (
+                <div className="grid gap-3 rounded-xl border border-amber-200 bg-amber-50/40 p-3 sm:grid-cols-2">
+                  <div>
+                    <label className="label mb-1">Check-out date</label>
+                    <input
+                      type="date"
+                      value={checkoutDate}
+                      onChange={(e) => setCheckoutDate(e.target.value)}
+                      className="input cursor-pointer"
+                    />
+                  </div>
+                  <div>
+                    <label className="label mb-1">Est. next check-in (optional)</label>
+                    <input
+                      type="date"
+                      value={nextCheckIn}
+                      onChange={(e) => setNextCheckIn(e.target.value)}
+                      className="input cursor-pointer"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="label mb-1">
+                  Lease-end remarks{" "}
+                  <span className="normal-case text-slate-400">
+                    ({remarks.length}/{LEASE_END_REMARKS_MAX})
+                  </span>
+                </label>
+                <textarea
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value.slice(0, LEASE_END_REMARKS_MAX))}
+                  rows={3}
+                  className="input resize-none"
+                  placeholder="e.g. Tenant relocating for work; handover on the last day; deposit refund pending final inspection…"
+                />
+              </div>
+            </>
+          )}
+
+          {error && <p className="text-sm font-medium text-red-500">{error}</p>}
+        </div>
+
+        <div className="sticky bottom-0 flex justify-end gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button type="button" onClick={onClose} className="btn-ghost">
+            Cancel
+          </button>
+          <button type="submit" disabled={saving || !lease} className="btn-primary">
+            {saving ? (
+              <>
+                <i className="fa-solid fa-spinner fa-spin" /> Saving…
+              </>
+            ) : (
+              "Save status"
+            )}
+          </button>
+        </div>
+      </form>
+    </div>,
+    document.body,
   );
 }
 
@@ -448,6 +721,12 @@ function PropertyFormModal({
   const [remarks, setRemarks] = useState(property?.remarks ?? "");
   const [isOwnStay, setIsOwnStay] = useState(property?.isOwnStay ?? false);
   const [soldDate, setSoldDate] = useState(property?.soldDate ? property.soldDate.slice(0, 10) : "");
+  const [unitName, setUnitName] = useState(property?.unitName ?? "");
+  const [unitTags, setUnitTags] = useState(property?.unitTags ?? "");
+  const [utilityDeposit, setUtilityDeposit] = useState(property ? String(property.utilityDeposit || "") : "");
+  const [meterMode, setMeterMode] = useState(property?.meterMode ?? "");
+  const [meterRate, setMeterRate] = useState(property?.meterRate != null ? String(property.meterRate) : "");
+  const [template, setTemplate] = useState(property?.template ?? "");
   // Rent (RM) and Monthly rent (RM) stay in sync — entering one sets the other.
   const [rentAmount, setRentAmount] = useState<string>(() =>
     property ? String(property.rent || property.monthlyRent || "") : "",
@@ -519,6 +798,12 @@ function PropertyFormModal({
       rent: rentAmount === "" ? undefined : Number(rentAmount),
       remarks,
       isOwnStay,
+      unitName: unitName || null,
+      unitTags: unitTags || null,
+      utilityDeposit: utilityDeposit === "" ? 0 : Number(utilityDeposit),
+      meterMode: meterMode || null,
+      meterRate: meterRate === "" ? null : Number(meterRate),
+      template: template || null,
       rentStartDate: fd.get("rentStartDate") || null,
       status,
       soldDate: status === "SOLD" ? soldDate || null : null,
@@ -585,6 +870,77 @@ function PropertyFormModal({
               placeholder="Notes about this unit, e.g. key handover, maintenance, tenancy quirks, etc."
             />
           </div>
+
+          {/* Unit & meter details (shown in the Properties & Leases table) */}
+          <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50/40 p-4">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Unit &amp; meter details</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <label className="label mb-1">Unit name</label>
+                <input
+                  value={unitName}
+                  onChange={(e) => setUnitName(e.target.value)}
+                  className="input"
+                  placeholder="e.g. Room 1, Level 3"
+                />
+              </div>
+              <div>
+                <label className="label mb-1">
+                  Unit tags <span className="normal-case text-slate-400">(comma-separated)</span>
+                </label>
+                <input
+                  value={unitTags}
+                  onChange={(e) => setUnitTags(e.target.value.slice(0, PROPERTY_UNIT_TAGS_MAX))}
+                  className="input"
+                  placeholder="e.g. Female Only, Private Bathroom"
+                />
+              </div>
+              <div>
+                <label className="label mb-1">Utility deposit (RM)</label>
+                <input
+                  value={utilityDeposit}
+                  onChange={(e) => setUtilityDeposit(e.target.value)}
+                  type="number"
+                  min={0}
+                  className="input"
+                  placeholder="e.g. 400"
+                />
+              </div>
+              <div>
+                <label className="label mb-1">Default meter mode</label>
+                <select value={meterMode} onChange={(e) => setMeterMode(e.target.value)} className="input cursor-pointer">
+                  <option value="">— Not set —</option>
+                  {PROPERTY_METER_MODES.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="label mb-1">Meter rate (RM/kWh)</label>
+                <input
+                  value={meterRate}
+                  onChange={(e) => setMeterRate(e.target.value)}
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  className="input"
+                  placeholder="e.g. 0.50"
+                />
+              </div>
+              <div>
+                <label className="label mb-1">Template</label>
+                <input
+                  value={template}
+                  onChange={(e) => setTemplate(e.target.value)}
+                  className="input"
+                  placeholder="e.g. Standard, Rental"
+                />
+              </div>
+            </div>
+          </div>
+
           <div>
             <label className="label mb-1">Rent (RM)</label>
             <input name="rent" type="number" value={rentAmount} onChange={(e) => setRentAmount(e.target.value)} className="input" placeholder="1500" />

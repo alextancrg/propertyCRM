@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { BillStatus, PropertyStatus } from "@prisma/client";
 import { formatMYR, formatDate, initials, cx } from "@/lib/format";
 import { requireUser } from "@/lib/auth";
-import { visiblePropertyIds } from "@/lib/access";
+import { visiblePropertyIds, visibleManagerIds } from "@/lib/access";
 import { getWhatsappUsage } from "@/lib/whatsapp";
 import { getTranslations } from "@/lib/i18n-server";
 import { dueDateForMonth } from "@/lib/rentals";
@@ -70,6 +70,11 @@ export default async function DashboardPage() {
   const propIds = await visiblePropertyIds(me);
   const propScope = propIds ? { id: { in: propIds } } : {};
   const rentScope = propIds ? { lease: { propertyId: { in: propIds } } } : {};
+  // The Recent Activity feed is confined to this manager's team — themselves
+  // plus the managers they share property visibility with (the connected
+  // component of the sharing graph). It is never AssetHub-wide. Administrators
+  // (null) still see the whole company's activity.
+  const teamIds = await visibleManagerIds(me);
 
   const [properties, unpaidRent, paidRent, unpaidBills, auditLogs, totalExpenses] = await Promise.all([
     prisma.property.count({ where: { deletedAt: null, ...propScope } }),
@@ -79,6 +84,8 @@ export default async function DashboardPage() {
       where: { status: BillStatus.UNPAID, ...(propIds ? { bill: { propertyId: { in: propIds } } } : {}) },
     }),
     prisma.auditLog.findMany({
+      // Confined to the team (sharing partners + self), never AssetHub-wide.
+      where: teamIds ? { userId: { in: teamIds } } : {},
       orderBy: { createdAt: "desc" },
       take: 6,
       include: { user: { select: { name: true } } },

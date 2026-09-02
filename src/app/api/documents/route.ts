@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/ai";
 import { getSessionUser } from "@/lib/auth";
 import { visiblePropertyIds } from "@/lib/access";
+import { DOC_MAX_BYTES, DOC_MAX_BYTES_LABEL, formatBytes } from "@/lib/documents";
 
 export const dynamic = "force-dynamic";
 
@@ -27,6 +28,18 @@ export async function POST(req: NextRequest) {
     openEnded || !leaseToRaw || !/^\d{4}-\d{2}-\d{2}/.test(leaseToRaw) ? null : new Date(leaseToRaw);
   const year = leaseFrom ? leaseFrom.getFullYear() : new Date().getFullYear();
   const file = form?.get("file");
+
+  // Vercel serverless functions cap request bodies at 4.5 MB and reject larger
+  // ones with 413 before this handler runs. Reject oversized files up front so
+  // the user gets a clear reason instead of an opaque failure.
+  if (file instanceof File && file.size > DOC_MAX_BYTES) {
+    return NextResponse.json(
+      {
+        error: `File is ${formatBytes(file.size)} — the maximum upload size is ${DOC_MAX_BYTES_LABEL}. Please compress the PDF (e.g. re-export or re-scan at a lower resolution) and try again.`,
+      },
+      { status: 400 },
+    );
+  }
 
   if (!title) {
     return NextResponse.json({ error: "title is required." }, { status: 400 });

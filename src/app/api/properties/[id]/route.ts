@@ -5,7 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { BillStatus, LeaseStatus, PropertyStatus } from "@prisma/client";
 import { generateBillCycles } from "@/lib/bills";
 import { resolveOwnerInput, validateOwners, type OwnerInput } from "@/lib/owners";
-import { PROPERTY_MAX_REMARKS } from "@/lib/properties";
+import { PROPERTY_MAX_REMARKS, PROPERTY_UNIT_TAGS_MAX } from "@/lib/properties";
 import { normalizePhoneE164 } from "@/lib/phone";
 
 export const dynamic = "force-dynamic";
@@ -126,6 +126,19 @@ export async function PATCH(
             ? String(body.remarks).slice(0, PROPERTY_MAX_REMARKS)
             : null
           : existing.remarks,
+      unitName: typeof body.unitName === "string" ? body.unitName : existing.unitName,
+      unitTags:
+        body.unitTags !== undefined
+          ? String(body.unitTags).slice(0, PROPERTY_UNIT_TAGS_MAX)
+          : existing.unitTags,
+      utilityDeposit:
+        body.utilityDeposit !== undefined ? Number(body.utilityDeposit) : existing.utilityDeposit,
+      meterMode: typeof body.meterMode === "string" ? body.meterMode : existing.meterMode,
+      meterRate:
+        body.meterRate !== undefined && body.meterRate !== null && body.meterRate !== ""
+          ? Number(body.meterRate)
+          : existing.meterRate,
+      template: typeof body.template === "string" ? body.template : existing.template,
     },
   });
 

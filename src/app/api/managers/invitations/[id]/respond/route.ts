@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { logAudit } from "@/lib/ai";
+import { MAX_SHARING_PARTNERS } from "@/lib/sharing";
+import { isSharingCapUser, sharingPartnerIds } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +31,7 @@ export async function POST(
 
   const invitation = await prisma.managerInvitation.findUnique({
     where: { id },
-    include: { fromUser: { select: { id: true, name: true, email: true } } },
+    include: { fromUser: { select: { id: true, name: true, email: true, role: true } } },
   });
   if (!invitation) {
     return NextResponse.json({ error: "Invitation not found." }, { status: 404 });
@@ -67,6 +69,29 @@ export async function POST(
   }
 
   // Accept — create the bidirectional sharing link (canonical id order).
+  // A Property Manager may only share/link with up to 5 other managers, so
+  // enforce the cap for BOTH managers before linking them.
+  for (const party of [
+    { id: invitation.fromUserId, role: invitation.fromUser.role },
+    { id: me.id, role: me.role },
+  ]) {
+    if (!isSharingCapUser(party)) continue;
+    const partners = (await sharingPartnerIds(party.id)).filter(
+      (pid) => pid !== invitation.fromUserId && pid !== me.id,
+    );
+    if (partners.length >= MAX_SHARING_PARTNERS) {
+      const isMe = party.id === me.id;
+      const who = isMe ? "You" : `${invitation.fromUser.name}`;
+      const verb = isMe ? "have" : "has";
+      return NextResponse.json(
+        {
+          error: `Sharing is limited to ${MAX_SHARING_PARTNERS} property managers per manager. ${who} already ${verb} ${partners.length} sharing partner${partners.length === 1 ? "" : "s"}, so this link cannot be added.`,
+        },
+        { status: 409 },
+      );
+    }
+  }
+
   const [a, b] = [invitation.fromUserId, me.id].sort();
   await prisma.managerSharing.upsert({
     where: { userAId_userBId: { userAId: a, userBId: b } },

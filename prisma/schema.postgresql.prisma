@@ -105,6 +105,13 @@ model Property {
   deletedAt     DateTime?       // soft delete — keeps documents & older bills intact
   remarks       String?         // free text, up to 300 characters
   isOwnStay     Boolean         @default(false) // own-stay unit: no rental collection, excluded from tax
+  unitName      String?         // unit name/number within the property (e.g. "Room 1")
+  unitTags      String?         // comma-separated unit tags shown as chips (e.g. "Female Only, Private Bathroom")
+  utilityDeposit Float          @default(0) // utility deposit collected from the tenant (RM)
+  meterMode     String?         // default meter mode: Prepaid | Postpaid
+  meterRate     Float?          // default meter rate (RM/kWh)
+  template      String?         // billing/lease template label
+  nextCheckInDate DateTime?     // estimated check-in of the next tenant after a notified checkout
   owners        PropertyOwner[]
   leases        Lease[]
   bills         Bill[]
@@ -202,6 +209,9 @@ model Lease {
   status       LeaseStatus   @default(ACTIVE)
   stampedAt    DateTime?
   stampingRef  String?
+  checkoutNotified Boolean    @default(false) // tenant informed they will vacate at lease end
+  checkoutDate     DateTime?  // the date the tenant said they will vacate (usually lease end)
+  leaseEndRemarks  String?    // free text about the lease end, up to 300 characters
   property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   rentPayments RentPayment[]

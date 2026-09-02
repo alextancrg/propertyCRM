@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { logAudit } from "@/lib/ai";
 import { getSessionUser } from "@/lib/auth";
 import { visiblePropertyIds } from "@/lib/access";
+import { DOC_MAX_BYTES, DOC_MAX_BYTES_LABEL, formatBytes } from "@/lib/documents";
 
 export const dynamic = "force-dynamic";
 
@@ -57,10 +58,19 @@ export async function PATCH(
   }
 
   // Optional file replacement — bytes persisted in the DB so the download
-  // works on any host.
+  // works on any host. Same 4.5 MB platform body cap applies, so reject
+  // oversized replacement files up front with a clear reason.
   let fileData = existing.fileData;
   let fileMime = existing.fileMime;
   const file = form?.get("file");
+  if (file instanceof File && file.size > DOC_MAX_BYTES) {
+    return NextResponse.json(
+      {
+        error: `File is ${formatBytes(file.size)} — the maximum upload size is ${DOC_MAX_BYTES_LABEL}. Please compress the PDF (e.g. re-export or re-scan at a lower resolution) and try again.`,
+      },
+      { status: 400 },
+    );
+  }
   if (file instanceof File && file.size > 0) {
     fileData = Buffer.from(await file.arrayBuffer()).toString("base64");
     fileMime = file.type || "application/octet-stream";

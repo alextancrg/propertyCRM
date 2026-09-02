@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { cx, formatDate } from "@/lib/format";
+import { DOC_MAX_BYTES, DOC_MAX_BYTES_LABEL, formatBytes } from "@/lib/documents";
 
 type DocDTO = {
   id: string;
@@ -67,12 +68,33 @@ export function DocumentsClient({
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [propertyFilter, setPropertyFilter] = useState("All");
   const [catFilter, setCatFilter] = useState("All");
   const [yearFilter, setYearFilter] = useState<string>("all");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<DocDTO | null>(null);
+  // Property sections are collapsible/expandable — click a property header to
+  // collapse or expand its documents. Default: all expanded.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  function toggleCollapsed(key: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   const categories = useMemo(() => Array.from(new Set(documents.map((d) => d.category))), [documents]);
+  // Property filter options come from the properties documents are filed under.
+  const propertyOptions = useMemo(() => {
+    const set = new Set<string>();
+    documents.forEach((d) => {
+      if (d.property) set.add(d.property);
+    });
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [documents]);
   // Year options come from lease tenure years plus the current year.
   const yearOptions = useMemo(() => {
     const set = new Set<number>([new Date().getFullYear()]);
@@ -87,25 +109,39 @@ export function DocumentsClient({
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
     return documents.filter((d) => {
-      const matchQ = !q || d.title.toLowerCase().includes(q) || (d.property ?? "").toLowerCase().includes(q);
+      // Search matches the title, property name and tenant name.
+      const matchQ =
+        !q ||
+        d.title.toLowerCase().includes(q) ||
+        (d.property ?? "").toLowerCase().includes(q) ||
+        (d.tenant ?? "").toLowerCase().includes(q);
+      const matchP = propertyFilter === "All" || d.property === propertyFilter;
       const matchC = catFilter === "All" || d.category === catFilter;
       const matchY = yearFilter === "all" || docInYear(d, Number(yearFilter));
-      return matchQ && matchC && matchY;
+      return matchQ && matchP && matchC && matchY;
     });
-  }, [documents, query, catFilter, yearFilter]);
+  }, [documents, query, propertyFilter, catFilter, yearFilter]);
 
-  // Group by lease start year (descending), then by upload date (descending).
-  const grouped = useMemo(() => {
-    const byYear = new Map<number, DocDTO[]>();
+  // Group by property (one collapsible section per property), sorted
+  // alphabetically with unassigned documents last; documents inside a property
+  // are newest first.
+  const propertyGroups = useMemo(() => {
+    const NONE = "__none__";
+    const byProp = new Map<string, { key: string; name: string; docs: DocDTO[] }>();
     [...filtered]
       .sort((a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime())
       .forEach((d) => {
-        const g = d.leaseFrom ? Number(d.leaseFrom.slice(0, 4)) : d.year;
-        const arr = byYear.get(g) ?? [];
-        arr.push(d);
-        byYear.set(g, arr);
+        const key = d.propertyId ?? NONE;
+        const name = d.property ?? "No property";
+        const g = byProp.get(key) ?? { key, name, docs: [] };
+        g.docs.push(d);
+        byProp.set(key, g);
       });
-    return Array.from(byYear.entries()).sort((a, b) => b[0] - a[0]);
+    return Array.from(byProp.values()).sort((a, b) => {
+      if (a.key === NONE) return 1;
+      if (b.key === NONE) return -1;
+      return a.name.localeCompare(b.name);
+    });
   }, [filtered]);
 
   return (
@@ -124,7 +160,18 @@ export function DocumentsClient({
       <div className="card flex flex-col gap-4 p-4 lg:flex-row lg:items-center">
         <div className="relative flex-1">
           <i className="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search documents…" className="input pl-11" />
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by title, property or tenant…" className="input pl-11" />
+        </div>
+        <div className="relative md:w-64">
+          <i className="fa-solid fa-building absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+          <select value={propertyFilter} onChange={(e) => setPropertyFilter(e.target.value)} className="input pl-9 cursor-pointer">
+            <option value="All">All properties</option>
+            {propertyOptions.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="relative md:w-48">
           <i className="fa-regular fa-calendar absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
@@ -148,81 +195,105 @@ export function DocumentsClient({
         </div>
       </div>
 
-      {/* Grouped by year */}
-      {grouped.length === 0 ? (
+      {/* Grouped by property — collapsible sections */}
+      {propertyGroups.length === 0 ? (
         <div className="card p-12 text-center text-slate-500">
           <i className="fa-solid fa-folder-open mb-3 text-4xl text-slate-300" />
           <p className="text-lg font-medium">No documents found.</p>
         </div>
       ) : (
-        grouped.map(([year, docs]) => (
-          <div key={year} className="space-y-3">
-            <div className="flex items-center gap-3">
-              <h4 className="text-lg font-black text-slate-800">{year}</h4>
-              <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-600">{docs.length} docs</span>
-              <div className="h-px flex-1 bg-slate-200" />
-            </div>
-            <div className="card overflow-hidden">
-              <ul className="divide-y divide-slate-100">
-                {docs.map((d) => {
-                  const meta = CATEGORY_ICON[d.category] ?? { icon: "fa-file", cls: "bg-slate-100 text-slate-500" };
-                  return (
-                    <li key={d.id} className="flex items-center gap-4 px-6 py-4 transition hover:bg-slate-50">
-                      <div className={cx("grid h-11 w-11 place-items-center rounded-xl", meta.cls)}>
-                        <i className={`fa-solid ${meta.icon}`} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
-                          <p className="truncate text-sm font-semibold text-slate-800">{d.title}</p>
-                          {d.isStamped && (
-                            <span className="pill bg-green-100 text-green-700">
-                              <i className="fa-solid fa-stamp" /> Stamped
-                            </span>
+        propertyGroups.map((group) => {
+          const isCollapsed = collapsed.has(group.key);
+          return (
+            <div key={group.key} className="card overflow-hidden">
+              <button
+                type="button"
+                onClick={() => toggleCollapsed(group.key)}
+                className="flex w-full flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-6 py-4 text-left transition hover:brightness-[0.98]"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary">
+                    <i className="fa-solid fa-building" />
+                  </span>
+                  <div>
+                    <h4 className="font-bold text-slate-900">{group.name}</h4>
+                    <p className="text-xs text-slate-500">
+                      {group.docs.length} document{group.docs.length === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                </div>
+                <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-slate-500 shadow-sm">
+                  <i className={cx("fa-solid transition-transform", isCollapsed ? "fa-chevron-down" : "fa-chevron-up")} />
+                </span>
+              </button>
+
+              {isCollapsed ? (
+                <p className="px-6 py-4 text-xs text-slate-400">
+                  <i className="fa-regular fa-eye-slash mr-1" />
+                  {group.docs.length} document{group.docs.length === 1 ? "" : "s"} — click the header to expand.
+                </p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {group.docs.map((d) => {
+                    const meta = CATEGORY_ICON[d.category] ?? { icon: "fa-file", cls: "bg-slate-100 text-slate-500" };
+                    return (
+                      <li key={d.id} className="flex items-center gap-4 px-6 py-4 transition hover:bg-slate-50">
+                        <div className={cx("grid h-11 w-11 place-items-center rounded-xl", meta.cls)}>
+                          <i className={`fa-solid ${meta.icon}`} />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <p className="truncate text-sm font-semibold text-slate-800">{d.title}</p>
+                            {d.isStamped && (
+                              <span className="pill bg-green-100 text-green-700">
+                                <i className="fa-solid fa-stamp" /> Stamped
+                              </span>
+                            )}
+                          </div>
+                          <p className="truncate text-xs text-slate-500">
+                            {d.category}
+                            {d.property ? ` · ${d.property}` : ""}
+                            {d.tenant ? ` · ${d.tenant}` : ""}
+                          </p>
+                          {d.leaseFrom && (
+                            <p className="mt-0.5 text-[11px] font-medium text-primary/80">
+                              <i className="fa-solid fa-calendar mr-1" />
+                              Lease: {tenureLabel(d)}
+                            </p>
                           )}
                         </div>
-                        <p className="truncate text-xs text-slate-500">
-                          {d.category}
-                          {d.property ? ` · ${d.property}` : ""}
-                          {d.tenant ? ` · ${d.tenant}` : ""}
-                        </p>
-                        {d.leaseFrom && (
-                          <p className="mt-0.5 text-[11px] font-medium text-primary/80">
-                            <i className="fa-solid fa-calendar mr-1" />
-                            Lease: {tenureLabel(d)}
-                          </p>
-                        )}
-                      </div>
-                      <span className="hidden shrink-0 text-xs font-medium text-slate-400 sm:block">{formatDate(d.uploadedAt)}</span>
-                      <button
-                        onClick={() => setEditing(d)}
-                        className="btn-ghost !px-3 !py-1.5 text-xs"
-                        title="Update lease dates / details"
-                      >
-                        <i className="fa-solid fa-pen" /> Edit
-                      </button>
-                      {d.fileUrl ? (
-                        <a
-                          href={d.fileUrl}
-                          download
-                          target="_blank"
-                          rel="noreferrer"
+                        <span className="hidden shrink-0 text-xs font-medium text-slate-400 sm:block">{formatDate(d.uploadedAt)}</span>
+                        <button
+                          onClick={() => setEditing(d)}
                           className="btn-ghost !px-3 !py-1.5 text-xs"
-                          title="Click to download"
+                          title="Update lease dates / details"
                         >
-                          <i className="fa-solid fa-download" /> Download
-                        </a>
-                      ) : (
-                        <span className="rounded-lg border border-dashed border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-400">
-                          No file
-                        </span>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
+                          <i className="fa-solid fa-pen" /> Edit
+                        </button>
+                        {d.fileUrl ? (
+                          <a
+                            href={d.fileUrl}
+                            download
+                            target="_blank"
+                            rel="noreferrer"
+                            className="btn-ghost !px-3 !py-1.5 text-xs"
+                            title="Click to download"
+                          >
+                            <i className="fa-solid fa-download" /> Download
+                          </a>
+                        ) : (
+                          <span className="rounded-lg border border-dashed border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-400">
+                            No file
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </div>
-          </div>
-        ))
+          );
+        })
       )}
 
       {(showModal || editing) && (
@@ -261,16 +332,33 @@ function UploadModal({
   const isEdit = Boolean(doc);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
   // Open-ended = no end date (until further notice). Default for new docs is
   // unchecked so the PM explicitly ticks it when the end date is unknown.
   const [openEnded, setOpenEnded] = useState(doc ? doc.leaseTo === null : false);
+
+  // Document bytes ride in a single POST body, and the host (Vercel) caps the
+  // request at 4.5 MB — reject oversized files up front with a clear message
+  // instead of letting the upload fail with an opaque error.
+  function fileTooBig(f: File | undefined | null): string | null {
+    if (!f || f.size <= DOC_MAX_BYTES) return null;
+    return `“${f.name}” is ${formatBytes(f.size)} — the maximum upload size is ${DOC_MAX_BYTES_LABEL}. Please compress the file (e.g. re-scan at a lower resolution) and try again.`;
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setSaving(true);
     setError(null);
+    setFileError(null);
     try {
       const fd = new FormData(e.currentTarget);
+      const chosen = fd.get("file");
+      if (chosen instanceof File && chosen.size > DOC_MAX_BYTES) {
+        const msg = fileTooBig(chosen);
+        setError(msg ?? "File is too large to upload.");
+        setSaving(false);
+        return;
+      }
       if (openEnded) fd.set("leaseTo", "");
       fd.set("openEnded", openEnded ? "true" : "false");
       // Always send the stamp flag so it can be toggled off when editing.
@@ -278,8 +366,23 @@ function UploadModal({
       const url = isEdit ? `/api/documents/${doc!.id}` : "/api/documents";
       const res = await fetch(url, { method: isEdit ? "PATCH" : "POST", body: fd });
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error ?? "Could not save the document.");
+        const text = await res.text().catch(() => "");
+        let msg = "Could not save the document. Please try again.";
+        if (text) {
+          try {
+            const data = JSON.parse(text) as { error?: string };
+            msg = data.error || msg;
+          } catch {
+            // Non-JSON body (e.g. the host's 413 FUNCTION_PAYLOAD_TOO_LARGE) —
+            // map it to a human-readable size message.
+            if (res.status === 413 || /payload too large|request entity too large/i.test(text)) {
+              msg = `The file is too large to upload — the maximum is ${DOC_MAX_BYTES_LABEL}. Please compress the PDF and try again.`;
+            } else if (text.trim().length < 300) {
+              msg = text.trim();
+            }
+          }
+        }
+        throw new Error(msg);
       }
       onSaved();
     } catch (err) {
@@ -359,7 +462,21 @@ function UploadModal({
             </div>
             <div className="col-span-2">
               <label className="label mb-1">{isEdit ? "Replace file (optional)" : "File"}</label>
-              <input name="file" type="file" className="input file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold" />
+              <input
+                name="file"
+                type="file"
+                onChange={(e) => setFileError(fileTooBig(e.target.files?.[0]))}
+                className="input file:mr-2 file:rounded file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-semibold"
+              />
+              <p className="mt-1 text-[11px] text-slate-400">
+                Maximum file size: {DOC_MAX_BYTES_LABEL}
+              </p>
+              {fileError && (
+                <p className="mt-1 flex items-start gap-1.5 text-xs font-medium text-red-600">
+                  <i className="fa-solid fa-triangle-exclamation mt-0.5" />
+                  {fileError}
+                </p>
+              )}
             </div>
           </div>
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">

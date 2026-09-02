@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth";
 import { logAudit } from "@/lib/ai";
 import { sendMail } from "@/lib/mail";
+import { MAX_SHARING_PARTNERS } from "@/lib/sharing";
+import { isSharingCapUser, sharingPartnerIds } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +52,19 @@ export async function POST(req: NextRequest) {
       { error: "An invitation to this manager is already pending." },
       { status: 409 },
     );
+  }
+
+  // A Property Manager may only share/link with up to 5 other managers.
+  if (isSharingCapUser(me)) {
+    const partners = await sharingPartnerIds(me.id);
+    if (partners.length >= MAX_SHARING_PARTNERS) {
+      return NextResponse.json(
+        {
+          error: `You can share visibility with up to ${MAX_SHARING_PARTNERS} property managers. You are already sharing with ${partners.length}, so no more invitations can be sent.`,
+        },
+        { status: 400 },
+      );
+    }
   }
 
   const token = crypto.randomBytes(24).toString("hex");
