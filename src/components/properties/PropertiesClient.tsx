@@ -51,6 +51,15 @@ type PropertyDTO = {
     checkoutDate: string | null;
     leaseEndRemarks: string | null;
   } | null;
+  futureLease: {
+    id: string;
+    tenantName: string;
+    tenantPhone: string | null;
+    monthlyRent: number;
+    deposit: number;
+    startDate: string;
+    endDate: string | null;
+  } | null;
 };
 
 type OwnerDTO = { id: string; name: string; phone: string | null };
@@ -189,6 +198,7 @@ export function PropertiesClient({
   const [editing, setEditing] = useState<PropertyDTO | null>(null);
   const [deleting, setDeleting] = useState<PropertyDTO | null>(null);
   const [leaseEnd, setLeaseEnd] = useState<PropertyDTO | null>(null);
+  const [futureLeaseFor, setFutureLeaseFor] = useState<PropertyDTO | null>(null);
 
   // Years are derived from lease coverage plus the current year.
   const yearOptions = useMemo(() => {
@@ -399,6 +409,15 @@ export function PropertiesClient({
                           <span className={cx("pill border", ls.badge.cls)}>
                             <i className={`fa-solid ${ls.badge.icon} text-[10px]`} /> {ls.badge.label}
                           </span>
+                          {p.futureLease && (
+                            <span
+                              className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-sky-700"
+                              title={`Future tenancy — ${p.futureLease.tenantName}, starts ${formatDate(p.futureLease.startDate)}`}
+                            >
+                              <i className="fa-solid fa-calendar-plus text-[10px]" />
+                              Next: {p.futureLease.tenantName} · {formatDate(p.futureLease.startDate)}
+                            </span>
+                          )}
                           {ls.action && (
                             <span className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-primary underline-offset-2 group-hover:underline">
                               <i className="fa-solid fa-circle-plus text-[10px]" /> {ls.action}
@@ -415,6 +434,13 @@ export function PropertiesClient({
                             className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
                           >
                             <i className="fa-solid fa-pen text-sm" />
+                          </button>
+                          <button
+                            onClick={() => setFutureLeaseFor(p)}
+                            title={p.futureLease ? "View / manage future tenancy" : "Add future tenancy"}
+                            className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-sky-50 hover:text-sky-600"
+                          >
+                            <i className={cx("fa-solid text-sm", p.futureLease ? "fa-calendar-check" : "fa-calendar-plus")} />
                           </button>
                           <Link
                             href="/documents"
@@ -481,6 +507,17 @@ export function PropertiesClient({
           onClose={() => setLeaseEnd(null)}
           onSaved={() => {
             setLeaseEnd(null);
+            router.refresh();
+          }}
+        />
+      )}
+
+      {futureLeaseFor && (
+        <FutureLeaseModal
+          property={futureLeaseFor}
+          onClose={() => setFutureLeaseFor(null)}
+          onSaved={() => {
+            setFutureLeaseFor(null);
             router.refresh();
           }}
         />
@@ -714,6 +751,244 @@ function LeaseEndModal({
               "Save status"
             )}
           </button>
+        </div>
+      </form>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Future tenancy modal. Lets the manager pre-book the NEXT lease for a unit
+ * while the current tenancy is still running: same details as the existing
+ * lease form (tenant, rent, deposit, tenure). Stored as a PENDING lease so it
+ * does not affect rent collection or tax until it starts; it can be started
+ * early or cancelled from here.
+ */
+function FutureLeaseModal({
+  property,
+  onClose,
+  onSaved,
+}: {
+  property: PropertyDTO;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const existing = property.futureLease;
+  const [tenantName, setTenantName] = useState(existing?.tenantName ?? "");
+  const [tenantPhone, setTenantPhone] = useState(existing?.tenantPhone ?? "");
+  const [tenantLanguage, setTenantLanguage] = useState("en");
+  const [rentAmount, setRentAmount] = useState(existing ? String(existing.monthlyRent ?? "") : "");
+  const [deposit, setDeposit] = useState(existing ? String(existing.deposit ?? "") : "");
+  const [startDate, setStartDate] = useState(existing?.startDate.slice(0, 10) ?? "");
+  const [endDate, setEndDate] = useState(existing?.endDate?.slice(0, 10) ?? "");
+  const [openEnded, setOpenEnded] = useState(existing ? !existing.endDate : false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Suggest a start date: day after the current lease ends (or today).
+  function suggestStart() {
+    const cur = property.lease?.endDate ? new Date(property.lease.endDate) : new Date();
+    cur.setDate(cur.getDate() + 1);
+    setStartDate(cur.toISOString().slice(0, 10));
+  }
+
+  async function submit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!tenantName.trim() || !startDate) {
+      setError("Tenant name and lease start date are required.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/leases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          propertyId: property.id,
+          tenantName: tenantName.trim(),
+          tenantPhone: tenantPhone || null,
+          tenantLanguage,
+          monthlyRent: rentAmount === "" ? undefined : Number(rentAmount),
+          deposit: deposit === "" ? 0 : Number(deposit),
+          startDate,
+          endDate: openEnded ? null : endDate || null,
+          openEnded,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error ?? "Failed to save the future tenancy.");
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save. Please try again.");
+      setSaving(false);
+    }
+  }
+
+  async function manage(action: "activate" | "cancel") {
+    if (!existing) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/leases/${existing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error ?? "Failed to update the future tenancy.");
+      onSaved();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update. Please try again.");
+      setSaving(false);
+    }
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 grid place-items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
+      <form onSubmit={submit} className="card w-full max-w-lg">
+        <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
+          <h3 className="font-bold text-slate-900">
+            <i className="fa-solid fa-calendar-plus mr-2 text-sky-600" />
+            {existing ? "Future Tenancy" : "Add Future Tenancy"} — {property.name}
+          </h3>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700">
+            <i className="fa-solid fa-xmark text-xl" />
+          </button>
+        </div>
+
+        <div className="grid gap-4 p-6">
+          {property.lease && (
+            <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+              Current tenancy: <span className="font-semibold text-slate-700">{property.lease.tenantName}</span> ·{" "}
+              {formatDate(property.lease.startDate)} – {property.lease.endDate ? formatDate(property.lease.endDate) : "Open"}
+            </p>
+          )}
+          {existing && (
+            <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-700">
+              <i className="fa-solid fa-circle-info mr-1" />
+              Future tenancy booked for <span className="font-bold">{existing.tenantName}</span> starting{" "}
+              {formatDate(existing.startDate)}
+              {existing.endDate ? ` until ${formatDate(existing.endDate)}` : ""}. Use{" "}
+              <span className="font-semibold">&quot;Start now&quot;</span> when the tenant moves in, or cancel it if
+              plans change.
+            </p>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="label mb-1">Tenant name</label>
+              <input value={tenantName} onChange={(e) => setTenantName(e.target.value)} className="input" placeholder="Full name" required />
+            </div>
+            <div>
+              <label className="label mb-1">Tenant phone</label>
+              <input
+                value={tenantPhone}
+                onChange={(e) => setTenantPhone(e.target.value)}
+                onBlur={() => setTenantPhone((v) => normalizePhoneE164(v) ?? v)}
+                className="input"
+                placeholder="01x-xxx-xxxx (auto-converted to +60…)"
+              />
+            </div>
+            <div>
+              <label className="label mb-1">Tenant language (WhatsApp)</label>
+              <select value={tenantLanguage} onChange={(e) => setTenantLanguage(e.target.value)} className="input cursor-pointer">
+                {SUPPORTED_LOCALES.map((l) => (
+                  <option key={l.value} value={l.value}>
+                    {l.native}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label mb-1">Monthly rent (RM)</label>
+              <input
+                value={rentAmount}
+                onChange={(e) => setRentAmount(e.target.value)}
+                type="number"
+                className="input"
+                placeholder={property.rent ? String(property.rent) : "1500"}
+              />
+            </div>
+            <div>
+              <label className="label mb-1">Rental deposit (RM)</label>
+              <input value={deposit} onChange={(e) => setDeposit(e.target.value)} type="number" min={0} className="input" placeholder="e.g. 3000" />
+            </div>
+            <div>
+              <label className="label mb-1">Lease start date</label>
+              <div className="flex items-center gap-2">
+                <input value={startDate} onChange={(e) => setStartDate(e.target.value)} type="date" className="input cursor-pointer" required />
+                {!existing && (
+                  <button
+                    type="button"
+                    onClick={suggestStart}
+                    title="Suggest the day after the current lease ends"
+                    className="shrink-0 rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-100"
+                  >
+                    Auto
+                  </button>
+                )}
+              </div>
+            </div>
+            <div>
+              <label className="label mb-1">Lease end date</label>
+              <input
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                type="date"
+                disabled={openEnded}
+                className="input cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+              />
+              <label className="mt-2 flex cursor-pointer items-start gap-2 text-xs font-medium text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={openEnded}
+                  onChange={(e) => setOpenEnded(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                />
+                <span>Open-ended lease — until further notice (no end date)</span>
+              </label>
+            </div>
+          </div>
+
+          {error && <p className="text-sm font-medium text-red-500">{error}</p>}
+        </div>
+
+        <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-6 py-4">
+          {existing ? (
+            <button
+              type="button"
+              onClick={() => manage("cancel")}
+              disabled={saving}
+              className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-bold text-red-600 transition hover:bg-red-100 disabled:opacity-40"
+            >
+              <i className="fa-solid fa-trash-can mr-1.5" /> Cancel tenancy
+            </button>
+          ) : (
+            <span />
+          )}
+          <div className="flex gap-3">
+            <button type="button" onClick={onClose} className="btn-ghost">
+              {existing ? "Close" : "Cancel"}
+            </button>
+            {!existing && (
+              <button type="submit" disabled={saving} className="btn-primary">
+                {saving ? (
+                  <>
+                    <i className="fa-solid fa-spinner fa-spin" /> Saving…
+                  </>
+                ) : (
+                  "Save future tenancy"
+                )}
+              </button>
+            )}
+            {existing && (
+              <button type="button" onClick={() => manage("activate")} disabled={saving} className="btn-primary">
+                <i className="fa-solid fa-play mr-1.5" /> Start now
+              </button>
+            )}
+          </div>
         </div>
       </form>
     </div>,

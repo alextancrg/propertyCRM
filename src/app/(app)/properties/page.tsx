@@ -16,7 +16,11 @@ export default async function PropertiesPage() {
       where: { deletedAt: null, ...scope },
       include: {
         owners: { include: { owner: true } },
-        leases: { where: { status: "ACTIVE" }, include: { tenant: true }, orderBy: { startDate: "desc" } },
+        leases: {
+          where: { status: { in: ["ACTIVE", "PENDING"] } },
+          include: { tenant: true },
+          orderBy: { startDate: "desc" },
+        },
       },
       orderBy: { name: "asc" },
     }),
@@ -27,7 +31,8 @@ export default async function PropertiesPage() {
   ]);
 
   const serialized = properties.map((p) => {
-    const lease = p.leases[0] ?? null;
+    const lease = p.leases.find((l) => l.status === "ACTIVE") ?? null;
+    const futureLease = p.leases.find((l) => l.status === "PENDING") ?? null;
     return {
       id: p.id,
       name: p.name,
@@ -67,6 +72,17 @@ export default async function PropertiesPage() {
             checkoutNotified: lease.checkoutNotified,
             checkoutDate: lease.checkoutDate?.toISOString() ?? null,
             leaseEndRemarks: lease.leaseEndRemarks,
+          }
+        : null,
+      futureLease: futureLease
+        ? {
+            id: futureLease.id,
+            tenantName: futureLease.tenant.name,
+            tenantPhone: futureLease.tenant.phone,
+            monthlyRent: futureLease.monthlyRent,
+            deposit: futureLease.deposit,
+            startDate: futureLease.startDate.toISOString(),
+            endDate: futureLease.endDate?.toISOString() ?? null,
           }
         : null,
     };

@@ -38,6 +38,49 @@ export async function PATCH(
     return NextResponse.json({ error: "You do not have access to this lease." }, { status: 403 });
   }
 
+  // Start a future (PENDING) tenancy now: expire the outgoing lease and make
+  // this one active.
+  if (body.action === "activate") {
+    if (lease.status !== "PENDING") {
+      return NextResponse.json({ error: "Only a future tenancy can be started." }, { status: 400 });
+    }
+    await prisma.$transaction([
+      prisma.lease.updateMany({
+        where: { propertyId: lease.propertyId, status: "ACTIVE" },
+        data: { status: "EXPIRED" },
+      }),
+      prisma.lease.update({ where: { id }, data: { status: "ACTIVE" } }),
+      prisma.property.update({
+        where: { id: lease.propertyId },
+        data: { status: "LEASED", nextCheckInDate: null },
+      }),
+    ]);
+    await logAudit(
+      "Lease",
+      "ACTIVATED",
+      `Future tenancy started: ${lease.property.name} (${lease.tenant.name}).`,
+      lease.propertyId,
+      me.id,
+    );
+    return NextResponse.json({ ok: true });
+  }
+
+  // Cancel a future tenancy (it has no rent history, so it can be removed).
+  if (body.action === "cancel") {
+    if (lease.status !== "PENDING") {
+      return NextResponse.json({ error: "Only a future tenancy can be cancelled." }, { status: 400 });
+    }
+    await prisma.lease.delete({ where: { id } });
+    await logAudit(
+      "Lease",
+      "CANCELLED",
+      `Future tenancy cancelled: ${lease.property.name} (${lease.tenant.name}).`,
+      lease.propertyId,
+      me.id,
+    );
+    return NextResponse.json({ ok: true });
+  }
+
   const checkoutNotified =
     typeof body.checkoutNotified === "boolean" ? body.checkoutNotified : lease.checkoutNotified;
   const checkoutDate =
