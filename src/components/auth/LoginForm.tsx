@@ -2,16 +2,20 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import { useI18n } from "@/lib/i18n";
 
-export function LoginForm() {
+function LoginFormInner() {
   const router = useRouter();
+  const params = useSearchParams();
   const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const verified = params.get("verified") === "1";
+  const verifyProblem = params.get("verify"); // "expired" | "invalid"
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -73,13 +77,46 @@ export function LoginForm() {
                 />
               </div>
 
+              {verified && (
+                <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700">
+                  <i className="fa-solid fa-circle-check mr-1.5" />
+                  Email verified! You can now log in.
+                </p>
+              )}
+              {verifyProblem && (
+                <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm font-medium text-amber-700">
+                  <i className="fa-solid fa-triangle-exclamation mr-1.5" />
+                  {verifyProblem === "expired"
+                    ? "That verification link has expired. Please sign up again or contact support."
+                    : "That verification link is invalid. Please sign up again or contact support."}
+                </p>
+              )}
+
               {error && <p className="text-sm font-medium text-red-500">{error}</p>}
 
               <button type="submit" disabled={saving} className="btn-primary w-full justify-center">
                 {saving ? <><i className="fa-solid fa-spinner fa-spin" /> {t("login.signingIn")}</> : t("login.signIn")}
               </button>
+
+              <div className="flex items-center justify-between text-sm">
+                <Link
+                  href="/forgot-password"
+                  className="font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
             </div>
           </form>
+
+          <div className="mt-4 text-center">
+            <Link
+              href="/signup"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg border border-white/30 bg-white/10 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-white/20"
+            >
+              <i className="fa-solid fa-user-plus" /> Sign up for a new account
+            </Link>
+          </div>
 
           <p className="mt-4 text-center text-xs text-blue-200/70">{t("login.registerHint")}</p>
           <p className="mt-3 text-center text-xs">
@@ -93,5 +130,13 @@ export function LoginForm() {
         </div>
       </div>
     </div>
+  );
+}
+
+export function LoginForm() {
+  return (
+    <Suspense>
+      <LoginFormInner />
+    </Suspense>
   );
 }

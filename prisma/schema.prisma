@@ -17,6 +17,10 @@ model User {
   email               String              @unique
   phone               String?
   passwordHash        String?
+  birthDate           DateTime?           // used to verify identity for password reset
+  emailVerifiedAt     DateTime?           // set when the user verifies their email via the signup link
+  resetTokenHash      String?             // HMAC hash of the password-reset token (never store raw tokens)
+  resetTokenExpiresAt DateTime?           // reset links expire after 24 hours
   role                String              @default("Property Manager")
   language            String              @default("en") // en | ms | zh-CN — WhatsApp template language for this user's messages
   auditLogs           AuditLog[]

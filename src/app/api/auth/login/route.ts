@@ -19,6 +19,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });
   }
 
+  // Self-registered accounts must verify their email before logging in.
+  // A pending "verify:" token in resetTokenHash marks an unverified signup;
+  // legacy/seeded users (null token + null emailVerifiedAt) are unaffected.
+  if (!user.emailVerifiedAt && user.resetTokenHash?.startsWith("verify:")) {
+    return NextResponse.json(
+      { error: "Please verify your email address first — check your inbox for the verification link." },
+      { status: 403 },
+    );
+  }
+
   const ok = await verifyPassword(password, user.passwordHash);
   if (!ok) {
     return NextResponse.json({ error: "Invalid email or password." }, { status: 401 });

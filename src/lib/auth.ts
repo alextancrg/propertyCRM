@@ -98,3 +98,41 @@ export async function requireUser(): Promise<NonNullable<Awaited<ReturnType<type
   if (!user) redirect("/login");
   return user;
 }
+
+const RESET_TTL_MS = 24 * 60 * 60 * 1000; // password reset links expire after 24 hours
+
+/**
+ * Generate a password-reset token for a user. The raw token is only ever
+ * present in the emailed link; the database stores an HMAC hash so a database
+ * leak cannot be used to reset passwords. Returns the raw token (call within
+ * 24h) and the expiry timestamp.
+ */
+export async function createResetToken(userId: string): Promise<{ token: string; expiresAt: Date }> {
+  const token = crypto.randomBytes(32).toString("base64url");
+  const tokenHash = sign(`reset:${token}`);
+  const expiresAt = new Date(Date.now() + RESET_TTL_MS);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { resetTokenHash: tokenHash, resetTokenExpiresAt: expiresAt },
+  });
+  return { token, expiresAt };
+}
+
+/** Validate a password-reset token; returns the user id or null. */
+export async function verifyResetToken(token: string): Promise<string | null> {
+  if (!token) return null;
+  const tokenHash = sign(`reset:${token}`);
+  const user = await prisma.user.findFirst({
+    where: { resetTokenHash: tokenHash, resetTokenExpiresAt: { gt: new Date() } },
+    select: { id: true },
+  });
+  return user?.id ?? null;
+}
+
+/** Clear a user's password-reset token (after use or when re-issuing). */
+export async function clearResetToken(userId: string): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { resetTokenHash: null, resetTokenExpiresAt: null },
+  });
+}
