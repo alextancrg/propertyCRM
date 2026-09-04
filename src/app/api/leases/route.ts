@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { LeaseStatus } from "@prisma/client";
 import { visiblePropertyIds } from "@/lib/access";
 import { normalizePhoneE164 } from "@/lib/phone";
+import { PROPERTY_UNIT_TAGS_MAX } from "@/lib/properties";
 
 export const dynamic = "force-dynamic";
 
@@ -20,8 +21,19 @@ export async function POST(req: NextRequest) {
   if (!me) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
   const body = await req.json().catch(() => ({}));
-  const { propertyId, tenantName, tenantPhone, tenantLanguage, monthlyRent, deposit, startDate, endDate, openEnded } =
-    body;
+  const {
+    propertyId,
+    tenantName,
+    tenantPhone,
+    tenantLanguage,
+    monthlyRent,
+    deposit,
+    utilityDeposit,
+    unitTags,
+    startDate,
+    endDate,
+    openEnded,
+  } = body;
 
   if (!propertyId || !tenantName || !startDate) {
     return NextResponse.json({ error: "propertyId, tenant name and lease start date are required." }, { status: 400 });
@@ -92,6 +104,14 @@ export async function POST(req: NextRequest) {
       endDate: end,
       monthlyRent: monthlyRent !== undefined && monthlyRent !== "" ? Number(monthlyRent) : property.rent,
       deposit: deposit !== undefined && deposit !== "" ? Number(deposit) : 0,
+      // Future tenancy only: stored on the pending lease and applied to the
+      // property when the tenancy is started (the active fields live on the
+      // Property record).
+      utilityDeposit:
+        utilityDeposit !== undefined && utilityDeposit !== "" && utilityDeposit !== null
+          ? Number(utilityDeposit)
+          : null,
+      unitTags: typeof unitTags === "string" && unitTags.trim() ? unitTags.trim().slice(0, PROPERTY_UNIT_TAGS_MAX) : null,
       status,
     },
   });

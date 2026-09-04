@@ -81,6 +81,8 @@ export default async function PropertiesPage() {
             tenantPhone: futureLease.tenant.phone,
             monthlyRent: futureLease.monthlyRent,
             deposit: futureLease.deposit,
+            utilityDeposit: futureLease.utilityDeposit,
+            unitTags: futureLease.unitTags,
             startDate: futureLease.startDate.toISOString(),
             endDate: futureLease.endDate?.toISOString() ?? null,
           }

@@ -57,6 +57,8 @@ type PropertyDTO = {
     tenantPhone: string | null;
     monthlyRent: number;
     deposit: number;
+    utilityDeposit: number | null;
+    unitTags: string | null;
     startDate: string;
     endDate: string | null;
   } | null;
@@ -786,6 +788,10 @@ function FutureLeaseModal({
   const [tenantLanguage, setTenantLanguage] = useState("en");
   const [rentAmount, setRentAmount] = useState(existing ? String(existing.monthlyRent ?? "") : "");
   const [deposit, setDeposit] = useState(existing ? String(existing.deposit ?? "") : "");
+  const [utilityDeposit, setUtilityDeposit] = useState(
+    existing ? String(existing.utilityDeposit ?? property.utilityDeposit ?? "") : "",
+  );
+  const [unitTags, setUnitTags] = useState(existing?.unitTags ?? property.unitTags ?? "");
   const [startDate, setStartDate] = useState(existing?.startDate.slice(0, 10) ?? "");
   const [endDate, setEndDate] = useState(existing?.endDate?.slice(0, 10) ?? "");
   const [openEnded, setOpenEnded] = useState(existing ? !existing.endDate : false);
@@ -818,6 +824,8 @@ function FutureLeaseModal({
           tenantLanguage,
           monthlyRent: rentAmount === "" ? undefined : Number(rentAmount),
           deposit: deposit === "" ? 0 : Number(deposit),
+          utilityDeposit: utilityDeposit === "" ? null : Number(utilityDeposit),
+          unitTags: unitTags || null,
           startDate,
           endDate: openEnded ? null : endDate || null,
           openEnded,
@@ -920,6 +928,28 @@ function FutureLeaseModal({
             <div>
               <label className="label mb-1">Rental deposit (RM)</label>
               <input value={deposit} onChange={(e) => setDeposit(e.target.value)} type="number" min={0} className="input" placeholder="e.g. 3000" />
+            </div>
+            <div>
+              <label className="label mb-1">Utility deposit (RM)</label>
+              <input
+                value={utilityDeposit}
+                onChange={(e) => setUtilityDeposit(e.target.value)}
+                type="number"
+                min={0}
+                className="input"
+                placeholder={property.utilityDeposit ? String(property.utilityDeposit) : "e.g. 400"}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="label mb-1">
+                Unit tags <span className="normal-case text-slate-400">(comma-separated)</span>
+              </label>
+              <input
+                value={unitTags}
+                onChange={(e) => setUnitTags(e.target.value.slice(0, PROPERTY_UNIT_TAGS_MAX))}
+                className="input"
+                placeholder="e.g. Female Only, Private Bathroom"
+              />
             </div>
             <div>
               <label className="label mb-1">Lease start date</label>

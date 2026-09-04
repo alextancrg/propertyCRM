@@ -52,7 +52,16 @@ export async function PATCH(
       prisma.lease.update({ where: { id }, data: { status: "ACTIVE" } }),
       prisma.property.update({
         where: { id: lease.propertyId },
-        data: { status: "LEASED", nextCheckInDate: null },
+        data: {
+          status: "LEASED",
+          nextCheckInDate: null,
+          // Apply the incoming tenant's deposits / tags captured on the future
+          // tenancy (the live values live on the Property record).
+          ...(lease.utilityDeposit !== null && lease.utilityDeposit !== undefined
+            ? { utilityDeposit: lease.utilityDeposit }
+            : {}),
+          ...(lease.unitTags ? { unitTags: lease.unitTags } : {}),
+        },
       }),
     ]);
     await logAudit(

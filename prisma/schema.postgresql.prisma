@@ -1,4 +1,4 @@
-// Postgres variant of the Prisma schema for Vercel production (AssetHub CRM).
+﻿// Postgres variant of the Prisma schema for Vercel production (AssetHub CRM).
 //
 // Usage:
 //   npx prisma generate --schema prisma/schema.postgresql.prisma
@@ -213,6 +213,8 @@ model Lease {
   checkoutNotified Boolean    @default(false) // tenant informed they will vacate at lease end
   checkoutDate     DateTime?  // the date the tenant said they will vacate (usually lease end)
   leaseEndRemarks  String?    // free text about the lease end, up to 300 characters
+  utilityDeposit  Float?     // future tenancy only: incoming tenant's utility deposit (applied to the property when the lease starts)
+  unitTags        String?    // future tenancy only: incoming tenant's unit tags (applied to the property when the lease starts)
   property     Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   rentPayments RentPayment[]
