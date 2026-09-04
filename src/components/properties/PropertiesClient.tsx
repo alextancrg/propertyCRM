@@ -341,7 +341,7 @@ export function PropertiesClient({
       ) : (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1150px] border-collapse text-sm">
+            <table className="w-full min-w-[1260px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <th className="px-4 py-3">Property Name</th>
@@ -433,7 +433,7 @@ export function PropertiesClient({
                         <button
                           type="button"
                           onClick={() => setLeaseEnd(p)}
-                          className={cx("group max-w-[215px] text-left", !ls.action && "cursor-default")}
+                          className={cx("group w-[320px] min-w-[320px] max-w-[320px] whitespace-nowrap text-left", !ls.action && "cursor-default")}
                           title={ls.action ? "Manage lease-end status" : undefined}
                         >
                           <span className={cx("pill border", ls.badge.cls)}>
