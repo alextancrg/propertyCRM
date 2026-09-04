@@ -1,4 +1,4 @@
-﻿// Postgres variant of the Prisma schema for Vercel production (AssetHub CRM).
+// Postgres variant of the Prisma schema for Vercel production (AssetHub CRM).
 //
 // Usage:
 //   npx prisma generate --schema prisma/schema.postgresql.prisma
