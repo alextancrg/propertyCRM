@@ -19,6 +19,7 @@ export default async function ManagersPage() {
         name: true,
         email: true,
         phone: true,
+        birthDate: true,
         language: true,
         role: true,
         createdAt: true,
@@ -27,6 +28,7 @@ export default async function ManagersPage() {
     })
   ).map((m) => ({
     ...m,
+    birthDate: m.birthDate?.toISOString().slice(0, 10) ?? null,
     createdAt: m.createdAt.toISOString(),
     updatedAt: m.updatedAt.toISOString(),
   }));

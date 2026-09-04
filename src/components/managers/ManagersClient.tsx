@@ -12,6 +12,7 @@ type Manager = {
   name: string;
   email: string;
   phone: string | null;
+  birthDate: string | null;
   language: string;
   role: string;
   createdAt: string;
@@ -57,10 +58,14 @@ export function ManagersClient({
     name: "",
     email: "",
     phone: "",
+    birthDate: "",
     role: "Property Manager",
     language: "en",
-    password: "",
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
   });
+  const [changePassword, setChangePassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -73,18 +78,44 @@ export function ManagersClient({
   const [responding, setResponding] = useState<string | null>(null);
 
   function resetForm() {
-    setForm({ name: "", email: "", phone: "", role: "Property Manager", language: "en", password: "" });
+    setForm({
+      name: "",
+      email: "",
+      phone: "",
+      birthDate: "",
+      role: "Property Manager",
+      language: "en",
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+    setChangePassword(false);
     setError(null);
   }
 
   function openEdit(m: Manager) {
     setEditing(m);
-    setForm({ name: m.name, email: m.email, phone: m.phone ?? "", role: m.role, language: m.language ?? "en", password: "" });
+    setForm({
+      name: m.name,
+      email: m.email,
+      phone: m.phone ?? "",
+      birthDate: m.birthDate ?? "",
+      role: m.role,
+      language: m.language ?? "en",
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+    setChangePassword(false);
     setShowRegister(false);
   }
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (editing && changePassword && form.newPassword !== form.confirmPassword) {
+      setError("New passwords do not match.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -92,7 +123,23 @@ export function ManagersClient({
       const res = await fetch(url, {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
+        body: JSON.stringify(
+          editing
+            ? {
+                name: form.name,
+                email: form.email,
+                phone: form.phone,
+                birthDate: form.birthDate || null,
+                role: form.role,
+                language: form.language,
+                // Password change only when the toggle is on; the API verifies
+                // the current password before applying the new one.
+                ...(changePassword && form.newPassword
+                  ? { currentPassword: form.currentPassword, password: form.newPassword }
+                  : {}),
+              }
+            : form,
+        ),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data?.error ?? "Failed to save manager.");
@@ -339,6 +386,18 @@ export function ManagersClient({
               />
             </div>
             <div>
+              <label className="label mb-1">
+                Birthdate <span className="normal-case text-slate-400">(for password-reset identity check)</span>
+              </label>
+              <input
+                type="date"
+                className="input cursor-pointer"
+                value={form.birthDate}
+                onChange={(e) => setForm({ ...form, birthDate: e.target.value })}
+                autoComplete="bday"
+              />
+            </div>
+            <div>
               <label className="label mb-1">Role</label>
               <select className="input cursor-pointer" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} disabled={!isAdmin}>
                 <option>Property Manager</option>
@@ -355,12 +414,71 @@ export function ManagersClient({
                 ))}
               </select>
             </div>
-            <div className="sm:col-span-2">
-              <label className="label mb-1">
-                {editing ? "Reset password (leave blank to keep current)" : "Password"}
-              </label>
-              <input type="password" className="input" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required={!editing} minLength={8} placeholder={editing ? "••••••••" : "At least 8 characters"} />
-            </div>
+            {!editing ? (
+              <div className="sm:col-span-2">
+                <label className="label mb-1">Password</label>
+                <input
+                  type="password"
+                  className="input"
+                  value={form.newPassword}
+                  onChange={(e) => setForm({ ...form, newPassword: e.target.value })}
+                  required
+                  minLength={8}
+                  placeholder="At least 8 characters"
+                />
+              </div>
+            ) : (
+              <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-700">
+                  <input
+                    type="checkbox"
+                    checked={changePassword}
+                    onChange={(e) => setChangePassword(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                  />
+                  Change password
+                </label>
+                {changePassword && (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <label className="label mb-1">Current password</label>
+                      <input
+                        type="password"
+                        className="input"
+                        value={form.currentPassword}
+                        onChange={(e) => setForm({ ...form, currentPassword: e.target.value })}
+                        autoComplete="current-password"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="label mb-1">New password</label>
+                      <input
+                        type="password"
+                        className="input"
+                        value={form.newPassword}
+                        onChange={(e) => setForm({ ...form, newPassword: e.target.value })}
+                        autoComplete="new-password"
+                        minLength={8}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="label mb-1">Confirm new password</label>
+                      <input
+                        type="password"
+                        className="input"
+                        value={form.confirmPassword}
+                        onChange={(e) => setForm({ ...form, confirmPassword: e.target.value })}
+                        autoComplete="new-password"
+                        minLength={8}
+                        required
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {error && <p className="text-sm font-medium text-red-500">{error}</p>}
