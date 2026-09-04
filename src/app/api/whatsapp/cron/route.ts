@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runRentReminders } from "@/lib/reminders";
+import { transitionFutureLeases } from "@/lib/leaseTransition";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +25,10 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // Start any future tenancy whose previous lease is up (before running rent
+  // reminders so the new lease is considered in the same run).
+  const transitions = await transitionFutureLeases(new Date());
+
   const result = await runRentReminders(new Date());
-  return NextResponse.json({ ok: true, ...result });
+  return NextResponse.json({ ok: true, transitions, ...result });
 }

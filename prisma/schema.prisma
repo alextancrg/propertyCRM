@@ -401,6 +401,7 @@ enum PropertyStatus {
   VACANT
   ARREARS
   SOLD
+  OWN_STAY
 }
 
 enum LeaseStatus {

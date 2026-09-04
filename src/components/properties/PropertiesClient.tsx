@@ -62,6 +62,18 @@ type PropertyDTO = {
     startDate: string;
     endDate: string | null;
   } | null;
+  archivedLeases: {
+    id: string;
+    tenantName: string;
+    tenantPhone: string | null;
+    monthlyRent: number;
+    deposit: number;
+    startDate: string;
+    endDate: string | null;
+    status: string;
+    stampedAt: string | null;
+    stampingRef: string | null;
+  }[];
 };
 
 type OwnerDTO = { id: string; name: string; phone: string | null };
@@ -83,7 +95,8 @@ function leaseInYear(p: PropertyDTO, year: number): boolean {
  *  - "ending" — lease ends within LEASE_END_ORANGE_DAYS (2 months)
  *  - "leased" — ongoing lease (incl. open-ended / notified checkout)
  */
-function leaseFilterKey(p: PropertyDTO, now = new Date()): "vacant" | "ended" | "ending" | "leased" {
+function leaseFilterKey(p: PropertyDTO, now = new Date()): "vacant" | "ended" | "ending" | "leased" | "ownstay" {
+  if (p.isOwnStay) return "ownstay";
   const l = p.lease;
   if (!l) return "vacant";
   if (l.checkoutNotified) return "leased";
@@ -108,6 +121,8 @@ function matchesStatusFilter(p: PropertyDTO, filter: string, now = new Date()): 
       return k === "leased";
     case "ending":
       return k === "ending";
+    case "ownstay":
+      return k === "ownstay";
     default:
       return true;
   }
@@ -128,6 +143,17 @@ type LeaseStatusView = {
  */
 function leaseStatusView(p: PropertyDTO, now = new Date()): LeaseStatusView {
   const l = p.lease;
+  // Own-stay units show their own status regardless of lease records.
+  if (p.isOwnStay) {
+    return {
+      badge: {
+        label: "Own Stay",
+        cls: "bg-violet-100 text-violet-700 border-violet-200",
+        icon: "fa-house",
+      },
+      action: null,
+    };
+  }
   if (!l) {
     return {
       badge: { label: "Vacant", cls: "bg-cyan-50 text-cyan-700 border-cyan-200", icon: "fa-bed" },
@@ -201,6 +227,7 @@ export function PropertiesClient({
   const [deleting, setDeleting] = useState<PropertyDTO | null>(null);
   const [leaseEnd, setLeaseEnd] = useState<PropertyDTO | null>(null);
   const [futureLeaseFor, setFutureLeaseFor] = useState<PropertyDTO | null>(null);
+  const [archiveFor, setArchiveFor] = useState<PropertyDTO | null>(null);
 
   // Years are derived from lease coverage plus the current year.
   const yearOptions = useMemo(() => {
@@ -295,6 +322,7 @@ export function PropertiesClient({
             <option value="leased">Leased</option>
             <option value="vacant">Vacant</option>
             <option value="ending">Lease ending (&lt; 2 months)</option>
+            <option value="ownstay">Own Stay</option>
           </select>
         </div>
       </div>
@@ -420,6 +448,17 @@ export function PropertiesClient({
                               Next: {p.futureLease.tenantName} · {formatDate(p.futureLease.startDate)}
                             </span>
                           )}
+                          {p.archivedLeases.length > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => setArchiveFor(p)}
+                              className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-slate-400 underline-offset-2 hover:text-slate-600 hover:underline"
+                              title="View past leases for this unit"
+                            >
+                              <i className="fa-solid fa-clock-rotate-left text-[10px]" />
+                              Past leases ({p.archivedLeases.length})
+                            </button>
+                          )}
                           {ls.action && (
                             <span className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-primary underline-offset-2 group-hover:underline">
                               <i className="fa-solid fa-circle-plus text-[10px]" /> {ls.action}
@@ -529,6 +568,10 @@ export function PropertiesClient({
             router.refresh();
           }}
         />
+      )}
+
+      {archiveFor && (
+        <LeaseArchiveModal property={archiveFor} onClose={() => setArchiveFor(null)} />
       )}
     </div>
   );
@@ -1027,6 +1070,87 @@ function FutureLeaseModal({
           </div>
         </div>
       </form>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * Lease archive modal — read-only list of a unit's past (EXPIRED / TERMINATED)
+ * leases: tenant, tenure, rent, deposit and LHDN stamping info.
+ */
+function LeaseArchiveModal({ property, onClose }: { property: PropertyDTO; onClose: () => void }) {
+  return createPortal(
+    <div className="fixed inset-0 z-50 grid place-items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
+      <div className="card w-full max-w-2xl">
+        <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
+          <h3 className="font-bold text-slate-900">
+            <i className="fa-solid fa-clock-rotate-left mr-2 text-slate-500" />
+            Past Leases — {property.name}
+          </h3>
+          <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700">
+            <i className="fa-solid fa-xmark text-xl" />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {property.archivedLeases.length === 0 ? (
+            <p className="text-sm text-slate-500">No past leases on record for this unit yet.</p>
+          ) : (
+            <ul className="space-y-3">
+              {property.archivedLeases.map((l) => (
+                <li key={l.id} className="rounded-xl border border-slate-200 bg-slate-50/60 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-slate-200 text-slate-600">
+                        <i className="fa-solid fa-user text-sm" />
+                      </span>
+                      <div>
+                        <p className="font-semibold text-slate-900">{l.tenantName}</p>
+                        <p className="text-xs text-slate-500">
+                          {formatDate(l.startDate)} – {l.endDate ? formatDate(l.endDate) : "Open"}
+                          {l.tenantPhone && <> · <span className="text-slate-400">{l.tenantPhone}</span></>}
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      className={cx(
+                        "pill border",
+                        l.status === "TERMINATED"
+                          ? "bg-red-50 text-red-700 border-red-200"
+                          : "bg-slate-100 text-slate-600 border-slate-200",
+                      )}
+                    >
+                      <i className={`fa-solid ${l.status === "TERMINATED" ? "fa-ban" : "fa-circle-check"} text-[10px]`} />
+                      {l.status === "TERMINATED" ? "Terminated" : "Completed"}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-slate-600">
+                    <span>
+                      <span className="font-semibold">Rent:</span> {formatMYR(l.monthlyRent)}/mo
+                    </span>
+                    <span>
+                      <span className="font-semibold">Deposit:</span> {formatMYR(l.deposit)}
+                    </span>
+                    {l.stampingRef && (
+                      <span>
+                        <span className="font-semibold">Stamped:</span>
+                        {l.stampedAt ? ` ${formatDate(l.stampedAt)}` : ""} · {l.stampingRef}
+                      </span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="sticky bottom-0 flex justify-end border-t border-slate-100 bg-slate-50 px-6 py-4">
+          <button type="button" onClick={onClose} className="btn-ghost">
+            Close
+          </button>
+        </div>
+      </div>
     </div>,
     document.body,
   );

@@ -53,7 +53,7 @@ export async function PATCH(
       prisma.property.update({
         where: { id: lease.propertyId },
         data: {
-          status: "LEASED",
+          status: lease.property.isOwnStay ? "OWN_STAY" : "LEASED",
           nextCheckInDate: null,
           // Apply the incoming tenant's deposits / tags captured on the future
           // tenancy (the live values live on the Property record).

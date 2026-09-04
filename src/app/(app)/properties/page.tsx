@@ -2,11 +2,15 @@ import { prisma } from "@/lib/prisma";
 import { PropertiesClient } from "@/components/properties/PropertiesClient";
 import { requireUser } from "@/lib/auth";
 import { propertyScope, visibleOwnerIds } from "@/lib/access";
+import { transitionFutureLeases } from "@/lib/leaseTransition";
 
 export const dynamic = "force-dynamic";
 
 export default async function PropertiesPage() {
   const me = await requireUser();
+  // Promote any future tenancy whose previous lease is up so the table always
+  // reflects current tenancies (idempotent; the daily cron does this too).
+  await transitionFutureLeases();
   const scope = await propertyScope(me);
   // The owner dropdown is scoped to owners the logged-in manager is tied to
   // (created or assigned); Administrators see all registered owners.
@@ -17,7 +21,7 @@ export default async function PropertiesPage() {
       include: {
         owners: { include: { owner: true } },
         leases: {
-          where: { status: { in: ["ACTIVE", "PENDING"] } },
+          where: { status: { in: ["ACTIVE", "PENDING", "EXPIRED", "TERMINATED"] } },
           include: { tenant: true },
           orderBy: { startDate: "desc" },
         },
@@ -87,6 +91,20 @@ export default async function PropertiesPage() {
             endDate: futureLease.endDate?.toISOString() ?? null,
           }
         : null,
+      archivedLeases: p.leases
+        .filter((l) => l.status === "EXPIRED" || l.status === "TERMINATED")
+        .map((l) => ({
+          id: l.id,
+          tenantName: l.tenant.name,
+          tenantPhone: l.tenant.phone,
+          monthlyRent: l.monthlyRent,
+          deposit: l.deposit,
+          startDate: l.startDate.toISOString(),
+          endDate: l.endDate?.toISOString() ?? null,
+          status: l.status,
+          stampedAt: l.stampedAt?.toISOString() ?? null,
+          stampingRef: l.stampingRef,
+        })),
     };
   });
 
