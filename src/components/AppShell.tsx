@@ -6,10 +6,12 @@ import { useEffect, useState } from "react";
 import { cx } from "@/lib/format";
 import { RouteProgress } from "@/components/RouteProgress";
 import { LanguageSwitcher } from "@/components/i18n/LanguageSwitcher";
+import { ProfileModal } from "@/components/auth/ProfileModal";
 import { useI18n } from "@/lib/i18n";
 
 const NAV = [
   { href: "/dashboard", key: "dashboard", icon: "fa-chart-pie" },
+  { href: "/quickstart", key: "quickstart", icon: "fa-map-signs" },
   { href: "/managers", key: "managers", icon: "fa-user-gear" },
   { href: "/owners", key: "owners", icon: "fa-users" },
   { href: "/properties", key: "properties", icon: "fa-house" },
@@ -25,6 +27,7 @@ const NAV = [
 // pathname → i18n dictionary key for the header/page title.
 const TITLE_KEYS: Record<string, string> = {
   "/dashboard": "titles.dashboard",
+  "/quickstart": "titles.quickstart",
   "/managers": "titles.managers",
   "/owners": "titles.owners",
   "/properties": "titles.properties",
@@ -46,7 +49,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { t } = useI18n();
   const [aiEnabled, setAiEnabled] = useState<boolean | null>(null);
-  const [user, setUser] = useState<{ id: string; name: string; email: string; role: string } | null>(null);
+  const [user, setUser] = useState<{
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    phone?: string | null;
+    birthDate?: string | null;
+  } | null>(null);
+  const [showProfile, setShowProfile] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -58,7 +69,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       const cached = sessionStorage.getItem(SHELL_CACHE_KEY);
       if (cached) {
         const data = JSON.parse(cached) as {
-          user?: { id: string; name: string; email: string; role: string } | null;
+          user?: { id: string; name: string; email: string; role: string; phone?: string | null; birthDate?: string | null } | null;
           aiEnabled?: boolean | null;
           ts?: number;
         };
@@ -151,13 +162,22 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <p className="truncate text-sm font-semibold">{user ? user.name : "…"}</p>
               <p className="truncate text-xs text-blue-300">{user ? t(`roles.${user.role}`) : t("app.notSignedIn")}</p>
             </div>
-            <button
-              onClick={signOut}
-              title={t("app.signOut")}
-              className="ml-auto grid h-7 w-7 place-items-center rounded-lg text-blue-300 transition hover:bg-white/10 hover:text-white"
-            >
-              <i className="fa-solid fa-right-from-bracket text-xs" />
-            </button>
+            <div className="ml-auto flex items-center gap-1">
+              <button
+                onClick={() => setShowProfile(true)}
+                title="My Profile — name, phone, birthdate, password"
+                className="grid h-7 w-7 place-items-center rounded-lg text-blue-300 transition hover:bg-white/10 hover:text-white"
+              >
+                <i className="fa-solid fa-user-pen text-xs" />
+              </button>
+              <button
+                onClick={signOut}
+                title={t("app.signOut")}
+                className="grid h-7 w-7 place-items-center rounded-lg text-blue-300 transition hover:bg-white/10 hover:text-white"
+              >
+                <i className="fa-solid fa-right-from-bracket text-xs" />
+              </button>
+            </div>
           </div>
           <Link
             href="/privacy-policy"
@@ -209,6 +229,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="mx-auto w-full max-w-7xl animate-fade-in">{children}</div>
         </main>
       </div>
+
+      {showProfile && user && (
+        <ProfileModal
+          user={{
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            phone: user.phone ?? null,
+            birthDate: user.birthDate ?? null,
+            role: user.role,
+          }}
+          onClose={() => setShowProfile(false)}
+          onSaved={() => {
+            // Re-fetch so the sidebar shows the updated name immediately.
+            fetch("/api/auth/me")
+              .then((r) => (r.ok ? r.json() : null))
+              .then((d) => {
+                if (d?.user) setUser(d.user);
+              })
+              .catch(() => {});
+          }}
+        />
+      )}
     </div>
     </>
   );

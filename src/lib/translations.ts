@@ -52,6 +52,7 @@ const en = {
   },
   nav: {
     dashboard: "Dashboard",
+    quickstart: "Quickstart",
     managers: "Profiles",
     owners: "Owners",
     properties: "Properties & Leases",
@@ -65,6 +66,7 @@ const en = {
   },
   titles: {
     dashboard: "Portfolio Overview",
+    quickstart: "Quickstart Guide",
     managers: "Profiles",
     owners: "Owners & Landlords",
     properties: "Properties & Leases",
@@ -260,6 +262,7 @@ const msPatch: DeepPartial<Dictionary> = {
   },
   nav: {
     dashboard: "Papan Pemuka",
+    quickstart: "Panduan Mula",
     managers: "Profil",
     owners: "Pemilik",
     properties: "Hartanah & Sewaan",
@@ -273,6 +276,7 @@ const msPatch: DeepPartial<Dictionary> = {
   },
   titles: {
     dashboard: "Gambaran Portfolio",
+    quickstart: "Panduan Mula Cepat",
     managers: "Profil",
     owners: "Pemilik & Tuan Tanah",
     properties: "Hartanah & Sewaan",
@@ -463,6 +467,7 @@ const zhPatch: DeepPartial<Dictionary> = {
   },
   nav: {
     dashboard: "仪表盘",
+    quickstart: "快速入门",
     managers: "账户",
     owners: "业主",
     properties: "房产与租约",
@@ -476,6 +481,7 @@ const zhPatch: DeepPartial<Dictionary> = {
   },
   titles: {
     dashboard: "投资组合概览",
+    quickstart: "快速入门指南",
     managers: "账户",
     owners: "业主与房东",
     properties: "房产与租约",
