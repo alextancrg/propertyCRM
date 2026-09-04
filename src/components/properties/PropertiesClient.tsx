@@ -438,9 +438,15 @@ export function PropertiesClient({
                           <button
                             onClick={() => setFutureLeaseFor(p)}
                             title={p.futureLease ? "View / manage future tenancy" : "Add future tenancy"}
-                            className="grid h-8 w-8 place-items-center rounded-lg text-slate-400 transition hover:bg-sky-50 hover:text-sky-600"
+                            className={cx(
+                              "flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition",
+                              p.futureLease
+                                ? "bg-sky-50 text-sky-700 hover:bg-sky-100"
+                                : "border border-sky-200 bg-white text-sky-700 hover:bg-sky-50",
+                            )}
                           >
-                            <i className={cx("fa-solid text-sm", p.futureLease ? "fa-calendar-check" : "fa-calendar-plus")} />
+                            <i className={cx("fa-solid text-xs", p.futureLease ? "fa-calendar-check" : "fa-calendar-plus")} />
+                            {p.futureLease ? "Future tenancy" : "Add future tenancy"}
                           </button>
                           <Link
                             href="/documents"
@@ -1344,7 +1350,15 @@ function PropertyFormModal({
               default meter mode (previously their own section). Rental deposit
               and utility deposit are clearly distinguished. */}
           <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-200 bg-slate-50/60 p-4">
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-wide text-slate-400">Tenant & lease (optional)</p>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-400">Tenant & lease (optional)</p>
+              <p className="text-[11px] text-slate-400">
+                <i className="fa-solid fa-circle-info mr-1 text-sky-500" />
+                Need to book the <span className="font-semibold text-slate-500">next</span> tenant before this lease
+                ends? Close this form and use{" "}
+                <span className="font-semibold text-sky-600">&quot;Add future tenancy&quot;</span> in the Actions column.
+              </p>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="label mb-1">Tenant name</label>
