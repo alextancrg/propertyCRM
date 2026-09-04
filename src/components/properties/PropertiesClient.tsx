@@ -482,12 +482,12 @@ export function PropertiesClient({
                             className={cx(
                               "flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition",
                               p.futureLease
-                                ? "bg-sky-50 text-sky-700 hover:bg-sky-100"
+                                ? "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
                                 : "border border-sky-200 bg-white text-sky-700 hover:bg-sky-50",
                             )}
                           >
                             <i className={cx("fa-solid text-xs", p.futureLease ? "fa-calendar-check" : "fa-calendar-plus")} />
-                            {p.futureLease ? "Future tenancy" : "Add future tenancy"}
+                            {p.futureLease ? "Future Tenancy Reserved" : "Add future tenancy"}
                           </button>
                           <Link
                             href="/documents"
