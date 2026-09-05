@@ -341,7 +341,7 @@ export function PropertiesClient({
       ) : (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1260px] border-collapse text-sm">
+            <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-left text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   <th className="px-4 py-3">Property Name</th>
@@ -399,7 +399,7 @@ export function PropertiesClient({
                       {/* Unit Tags */}
                       <td className="px-4 py-3 align-top">
                         {tags.length > 0 ? (
-                          <div className="flex max-w-[170px] flex-wrap gap-1">
+                          <div className="flex max-w-[20%] flex-wrap gap-1">
                             {tags.slice(0, 3).map((t) => (
                               <span
                                 key={t}
@@ -433,7 +433,7 @@ export function PropertiesClient({
                         <button
                           type="button"
                           onClick={() => setLeaseEnd(p)}
-                          className={cx("group w-[320px] min-w-[320px] max-w-[320px] whitespace-nowrap text-left", !ls.action && "cursor-default")}
+                          className={cx("group w-[25%] min-w-[25%] max-w-[25%] whitespace-nowrap text-left", !ls.action && "cursor-default")}
                           title={ls.action ? "Manage lease-end status" : undefined}
                         >
                           <span className={cx("pill border", ls.badge.cls)}>
@@ -611,7 +611,7 @@ function DeleteConfirmModal({
 
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
-      <form onSubmit={submit} className="card w-full max-w-md">
+      <form onSubmit={submit} className="card w-full max-w-[90%]">
         <div className="border-b border-slate-100 bg-red-50/60 px-6 py-4">
           <h3 className="font-bold text-slate-900">
             <i className="fa-solid fa-triangle-exclamation mr-2 text-red-500" />
@@ -703,7 +703,7 @@ function LeaseEndModal({
 
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
-      <form onSubmit={submit} className="card w-full max-w-lg">
+      <form onSubmit={submit} className="card w-full max-w-[95%]">
         <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
           <h3 className="font-bold text-slate-900">
             <i className="fa-solid fa-door-open mr-2 text-primary" /> Lease-End Status — {property.name}
@@ -904,7 +904,7 @@ function FutureLeaseModal({
 
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
-      <form onSubmit={submit} className="card w-full max-w-lg">
+      <form onSubmit={submit} className="card w-full max-w-[95%]">
         <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
           <h3 className="font-bold text-slate-900">
             <i className="fa-solid fa-calendar-plus mr-2 text-sky-600" />
@@ -1082,7 +1082,7 @@ function FutureLeaseModal({
 function LeaseArchiveModal({ property, onClose }: { property: PropertyDTO; onClose: () => void }) {
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
-      <div className="card w-full max-w-2xl">
+      <div className="card w-full max-w-[95%]">
         <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
           <h3 className="font-bold text-slate-900">
             <i className="fa-solid fa-clock-rotate-left mr-2 text-slate-500" />
@@ -1308,7 +1308,7 @@ function PropertyFormModal({
 
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
-      <form onSubmit={handleSubmit} className="card w-full max-w-2xl">
+      <form onSubmit={handleSubmit} className="card w-full max-w-[95%]">
         <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
           <h3 className="font-bold text-slate-900">{isEdit ? `Edit Property — ${property!.name}` : "Add New Property Unit"}</h3>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700">

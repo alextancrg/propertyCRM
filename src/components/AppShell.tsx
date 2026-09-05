@@ -225,8 +225,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-6 lg:p-8">
-          <div className="mx-auto w-full max-w-7xl animate-fade-in">{children}</div>
+        <main className="w-full flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">
+          <div className="mx-auto w-full max-w-[95%] animate-fade-in">{children}</div>
         </main>
       </div>
 

@@ -272,7 +272,7 @@ function DeleteOwnerModal({
 
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
-      <form onSubmit={submit} className="card w-full max-w-md">
+      <form onSubmit={submit} className="card w-full max-w-[90%]">
         <div className="border-b border-slate-100 bg-red-50/60 px-6 py-4">
           <h3 className="font-bold text-slate-900">
             <i className="fa-solid fa-triangle-exclamation mr-2 text-red-500" />

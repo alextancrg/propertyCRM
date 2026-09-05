@@ -388,7 +388,7 @@ function EditPropertyModal({
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/50 p-4 backdrop-blur-sm">
-      <div className="card max-h-[92vh] w-full max-w-lg overflow-y-auto">
+      <div className="card max-h-[92vh] w-full max-w-[95%] overflow-y-auto">
         <div className="sticky top-0 flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
           <h3 className="font-bold text-slate-900">Edit Property — {property.name}</h3>
           <button type="button" onClick={onClose} className="text-slate-400 hover:text-slate-700">

@@ -364,7 +364,7 @@ function RentalPaymentModal({
 
   return createPortal(
     <div className="fixed inset-0 z-50 grid place-items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
-      <div className="card w-full max-w-md overflow-hidden">
+      <div className="card w-full max-w-[90%] overflow-hidden">
         <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-6 py-4">
           <h3 className="font-bold text-slate-900">
             {payment.label} — {lease.propertyName}
